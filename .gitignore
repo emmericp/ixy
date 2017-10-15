@@ -1,0 +1,12 @@
+# cmake
+CMakeCache.txt
+CMakeFiles
+cmake_install.cmake
+cmake-build-*
+Makefile
+
+# vim
+.*.s[a-z][a-z]
+
+ixy-fwd
+ixy-pktgen
