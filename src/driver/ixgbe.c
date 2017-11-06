@@ -219,7 +219,7 @@ static void wait_for_link(const struct ixy_device* dev) {
 
 // see section 4.6.3
 static void reset_and_init(struct ixy_device* dev) {
-	info("Resetting device %s", dev->addr);
+	info("Resetting device %s", dev->pci_addr);
 	// section 4.6.3.1 - disable all interrupts
 	set_reg32(dev, IXGBE_EIMC, 0x7FFFFFFF);
 
@@ -231,7 +231,7 @@ static void reset_and_init(struct ixy_device* dev) {
 	// section 4.6.3.1 - disable interrupts again after reset
 	set_reg32(dev, IXGBE_EIMC, 0x7FFFFFFF);
 
-	info("Initializing device %s", dev->addr);
+	info("Initializing device %s", dev->pci_addr);
 
 	// section 4.6.3 - Wait for EEPROM auto read completion
 	wait_set_reg32(dev, IXGBE_EEC, IXGBE_EEC_ARD);
