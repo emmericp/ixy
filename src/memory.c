@@ -80,13 +80,22 @@ struct mempool* memory_allocate_mempool(uint32_t num_entries, uint32_t entry_siz
 	return mempool;
 }
 
-struct pkt_buf* pkt_buf_alloc(struct mempool* mempool) {
-	if (mempool->free_stack_top == 0) {
-		debug("memory pool %p is empty!", mempool);
-		return NULL;
+uint32_t pkt_buf_alloc_batch(struct mempool* mempool, struct pkt_buf* bufs[], uint32_t num_bufs) {
+	if (mempool->free_stack_top < num_bufs) {
+		warn("memory pool %p only has %d free bufs, requested %d", mempool, mempool->free_stack_top, num_bufs);
+		num_bufs = mempool->free_stack_top;
 	}
-	uint32_t entry_id = mempool->free_stack[--mempool->free_stack_top];
-	return (struct pkt_buf*) (((uint8_t*) mempool->base_addr) + entry_id * mempool->buf_size);
+	for (uint32_t i = 0; i < num_bufs; i++) {
+		uint32_t entry_id = mempool->free_stack[--mempool->free_stack_top];
+		bufs[i] = (struct pkt_buf*) (((uint8_t*) mempool->base_addr) + entry_id * mempool->buf_size);
+	}
+	return num_bufs;
+}
+
+struct pkt_buf* pkt_buf_alloc(struct mempool* mempool) {
+	struct pkt_buf* buf = NULL;
+	pkt_buf_alloc_batch(mempool, &buf, 1);
+	return buf;
 }
 
 void pkt_buf_free(struct pkt_buf* buf) {

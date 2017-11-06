@@ -18,6 +18,8 @@ const int MAX_TX_QUEUE_ENTRIES = 4096;
 const int NUM_RX_QUEUE_ENTRIES = 1024;
 const int NUM_TX_QUEUE_ENTRIES = 1024;
 
+const int TX_CLEAN_BATCH = 32;
+
 // allocated for each rx queue, keeps state for the receive function
 struct ixgbe_rx_queue {
 	volatile union ixgbe_adv_rx_desc* descriptors;
@@ -381,52 +383,85 @@ struct pkt_buf* ixgbe_rx_packet(struct ixy_device* dev, uint16_t queue_id) {
 // we control the tail, hardware the head
 // huge performance gains possible here by sending packets in batches - writing to TDT for every packet is not efficient
 // returns the number of packets transmitted, will not block when the queue is full
-uint16_t ixgbe_tx_packet(struct ixy_device* dev, uint16_t queue_id, struct pkt_buf* buf) {
+uint32_t ixgbe_tx_batch(struct ixy_device* dev, uint16_t queue_id, struct pkt_buf* bufs[], uint32_t num_bufs) {
 	struct ixgbe_tx_queue* queue = ((struct ixgbe_tx_queue*)(dev->tx_queues)) + queue_id;
 	// the descriptor is explained in section 7.2.3.2.4
-	// we just use a struct copy & pasted from intel, but it basically has two format (hence a union):
+	// we just use a struct copy & pasted from intel, but it basically has two formats (hence a union):
 	// 1. the write-back format which is written by the NIC once sending it is finished this is used in step 1
 	// 2. the read format which is read by the NIC and written by us, this is used in step 2
 
-	uint16_t clean_index = queue->clean_index;
-	uint16_t cur_index = queue->tx_index;
+	uint16_t clean_index = queue->clean_index; // next descriptor to clean up
+	uint16_t cur_index = queue->tx_index; // next descriptor to use for tx
 
 	// step 1: clean up descriptors that were sent out by the hardware and return them to the mempool
 	// start by reading step 2 which is done first for each packet
-	// performance improvement opportunity: don't do this on every call, see DPDK driver for an example
-	// this currently requires 30% of the total time, but it will be less bad when we have a batch API
-	while (clean_index != cur_index) {
-		volatile union ixgbe_adv_tx_desc* txd = queue->descriptors + clean_index;
+	// cleaning up must be done in batches for performance reasons, so this is unfortunately somewhat complicated
+	while (true) {
+		// figure out how many descriptors can be cleaned up
+		int32_t cleanable = cur_index - clean_index; // cur is always ahead of clean (invariant of our queue)
+		if (cleanable < 0) { // handle wrap-around
+			cleanable = queue->num_entries + cleanable;
+		}
+		if (cleanable < TX_CLEAN_BATCH) {
+			break;
+		}
+		// calculcate the index of the last transcriptor in the clean batch
+		// we can't check all descriptors for performance reasons
+		int32_t cleanup_to = clean_index + TX_CLEAN_BATCH - 1;
+		if (cleanup_to >= queue->num_entries) {
+			cleanup_to -= queue->num_entries;
+		}
+		volatile union ixgbe_adv_tx_desc* txd = queue->descriptors + cleanup_to;
 		uint32_t status = txd->wb.status;
-		// hardware sets this flag as soon as it's sent out, we can give it back to the mempool
+		// hardware sets this flag as soon as it's sent out, we can give back all bufs in the batch back to the mempool
 		if (status & IXGBE_ADVTXD_STAT_DD) {
-			struct pkt_buf* buf = queue->virtual_addresses[clean_index];
-			pkt_buf_free(buf);
-			clean_index = wrap_ring(clean_index, queue->num_entries);
+			int32_t i = clean_index;
+			while (true) {
+				struct pkt_buf* buf = queue->virtual_addresses[i];
+				pkt_buf_free(buf);
+				if (i == cleanup_to) {
+					break;
+				}
+				i = wrap_ring(i, queue->num_entries);
+			}
+			// next descriptor to be cleaned up is one after the one we just cleaned
+			clean_index = wrap_ring(cleanup_to, queue->num_entries);
 		} else {
-			// reached an unsent descriptor, can't continue cleaning
+			// clean the whole batch or nothing; yes, this leaves some packets in
+			// the queue forever if you stop transmitting, but that's not a real concern
 			break;
 		}
 	}
 	queue->clean_index = clean_index;
 
-	// step 2: send out our packet, if possible
-	// we are full if the next index is the one we are trying to reclaim
-	if (clean_index == wrap_ring(cur_index, queue->num_entries)) {
-		return 0;
+	// step 2: send out as many of our packets as possible
+	uint32_t sent;
+	for (sent = 0; sent < num_bufs; sent++) {
+		uint32_t next_index = wrap_ring(cur_index, queue->num_entries);
+		// we are full if the next index is the one we are trying to reclaim
+		if (clean_index == next_index) {
+			break;
+		}
+		struct pkt_buf* buf = bufs[sent];
+		// remember virtual address to clean it up later
+		queue->virtual_addresses[cur_index] = (void*) buf;
+		queue->tx_index = wrap_ring(queue->tx_index, queue->num_entries );
+		volatile union ixgbe_adv_tx_desc* txd = queue->descriptors + cur_index;
+		// NIC reads from here
+		txd->read.buffer_addr = buf->buf_addr_phy + offsetof(struct pkt_buf, data);
+		// always the same flags: one buffer (EOP), advanced data descriptor, CRC offload, data length
+		txd->read.cmd_type_len =
+			IXGBE_ADVTXD_DCMD_EOP | IXGBE_ADVTXD_DCMD_RS | IXGBE_ADVTXD_DCMD_IFCS | IXGBE_ADVTXD_DCMD_DEXT | IXGBE_ADVTXD_DTYP_DATA | buf->size;
+		// no fancy offloading stuff - only the total payload length
+		// implement offloading flags here:
+		// 	* ip checksum offloading is trivial: just set the offset
+		// 	* tcp/udp checksum offloading is more annoying, you have to precalculate the pseudo-header checksum
+		txd->read.olinfo_status = buf->size << IXGBE_ADVTXD_PAYLEN_SHIFT;
+		cur_index = next_index;
 	}
-	// remember virtual address to clean it up later
-	queue->virtual_addresses[cur_index] = (void*) buf;
-	queue->tx_index = wrap_ring(queue->tx_index, queue->num_entries );
-	volatile union ixgbe_adv_tx_desc* txd = queue->descriptors + cur_index;
-	// NIC reads from here
-	txd->read.buffer_addr = buf->buf_addr_phy + offsetof(struct pkt_buf, data);
-	// always the same flags: one buffer (EOP), advanced data descriptor, CRC offload, data length
-	txd->read.cmd_type_len =
-		IXGBE_ADVTXD_DCMD_EOP | IXGBE_ADVTXD_DCMD_RS | IXGBE_ADVTXD_DCMD_IFCS | IXGBE_ADVTXD_DCMD_DEXT | IXGBE_ADVTXD_DTYP_DATA | buf->size;
-	// no fancy offloading stuff - only the total payload length
-	txd->read.olinfo_status = buf->size << IXGBE_ADVTXD_PAYLEN_SHIFT;
-	// send out by advancing tail
+	// send out by advancing tail, i.e., pass control of the bufs to the nic
+	// this seems like a textbook case for a release memory order, but Intel's driver doesn't even use a compiler barrier here
 	set_reg32(dev, IXGBE_TDT(queue_id), queue->tx_index);
-	return 1;
+	return sent;
 }
+

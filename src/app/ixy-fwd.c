@@ -38,7 +38,9 @@ int main(int argc, char* argv[]) {
 		struct pkt_buf* buf = ixgbe_rx_packet(dev1, 0);
 		if (buf) {
 			// transmit function takes care of freeing the packet
-			ixgbe_tx_packet(dev2, 0, buf);
+			while (!ixgbe_tx_batch(dev2, 0, &buf, 1)) {
+				// busy wait until we can send out that packet
+			}
 		}
 
 		// don't poll the time unnecessarily
@@ -58,5 +60,5 @@ int main(int argc, char* argv[]) {
 			}
 		}
 	}
-
 }
+

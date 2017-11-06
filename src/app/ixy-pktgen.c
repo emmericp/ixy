@@ -9,6 +9,9 @@
 // excluding CRC (offloaded by default)
 static const int PKT_SIZE = 60;
 
+// number of packets sent simultaneously to our driver
+static const uint32_t BATCH_SIZE = 64;
+
 static struct mempool* init_mempool() {
 	const int NUM_BUFS = 2048;
 	struct mempool* mempool = memory_allocate_mempool(NUM_BUFS, 0);
@@ -40,25 +43,24 @@ int main(int argc, char* argv[]) {
 	}
 
 	struct mempool* mempool = init_mempool();
+	struct ixy_device* dev = ixgbe_init(argv[1], 1, 1);
 
 	uint64_t last_stats_printed = monotonic_time();
-	struct ixy_device* dev = ixgbe_init(argv[1], 1, 1);
+	uint64_t counter = 0;
 	struct device_stats stats_old, stats;
 	stats_init(&stats, dev);
 	stats_init(&stats_old, dev);
 
-	uint64_t counter = 0;
+	// array of bufs sent out in a batch
+	struct pkt_buf* bufs[BATCH_SIZE];
+
 	// tx loop
 	while (true) {
-		// we cannot immediately recycle a packet, we need to allocate a new one
-		// the old packet might still be used by the NIC
-		struct pkt_buf* buf = pkt_buf_alloc(mempool);
-		// the packet could be modified here to generate multiple flows
-		// transmit is non-blocking, we have to retry until there is space in the queue
-		while (!ixgbe_tx_packet(dev, 0, buf)) {
-			// this is the busy-wait part of a typical ixy or DPDK app, you could do a short sleep here
-			// to prevent 100% cpu load at the cost of reliability
-		};
+		// we cannot immediately recycle packets, we need to allocate new packets every time
+		// the old packets might still be used by the NIC: tx is async
+		pkt_buf_alloc_batch(mempool, bufs, BATCH_SIZE);
+		// the packets could be modified here to generate multiple flows
+		ixgbe_tx_batch_busy_wait(dev, 0, bufs, BATCH_SIZE);
 
 		// don't check time for every packet, this yields +10% performance :)
 		if ((counter++ & 0xFFF) == 0) {
@@ -75,3 +77,4 @@ int main(int argc, char* argv[]) {
 	}
 	return 0;
 }
+

@@ -19,6 +19,12 @@ struct ixy_device {
 	void* tx_queues;
 };
 
+// getters/setters for PCIe memory mapped registers
+// this code looks like it's in need of some memory barrier intrinsics, but that's apparently not needed on x86
+// dpdk has release/acquire memory order calls before/after the memory accesses, but they are defined as
+// simple compiler barriers (i.e., the same empty asm with dependency on memory as here) on x86
+// dpdk also defines an additional relaxed load/store for the registers that only uses a volatile access,  we skip that for simplicity
+
 static inline void set_reg32(struct ixy_device* dev, int reg, uint32_t value) {
 	__asm__ volatile ("" : : : "memory");
 	*((volatile uint32_t*) (dev->addr + reg)) = value;
@@ -44,7 +50,6 @@ static inline void wait_clear_reg32(const struct ixy_device* dev, int reg, uint3
 		debug("waiting for flags 0x%08X in register 0x%05X to clear, current value 0x%08X", mask, reg, cur);
 		usleep(10000);
 		__asm__ volatile ("" : : : "memory");
-		__sync_synchronize();
 	}
 }
 
@@ -57,6 +62,5 @@ static inline void wait_set_reg32(const struct ixy_device* dev, int reg, uint32_
 		__asm__ volatile ("" : : : "memory");
 	}
 }
-
 
 #endif //IXY_DEVICE_H
