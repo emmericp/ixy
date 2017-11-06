@@ -8,7 +8,7 @@ In fact, reading both DPDK and Snabb drivers was crucial to understand some part
 
 
 ixy is designed for educational purposes to learn how a network card works at the driver level.
-Lack of kernel code and a allows you to look through the whole code from startup to the lowest level of the driver.
+Lack of kernel code and external libraries allows you to look through the whole code from startup to the lowest level of the driver.
 Low-level functions like handling DMA descriptors are rarely more than a single function call away from your application logic.
 
 A whole ixy app, including the whole driver, is only ~1000 lines of C code.
@@ -24,13 +24,12 @@ You will be surprised how simple a full driver for a network card can be.
 * No kernel modules needed
 * Simple API with memory management, similar to DPDK, easier to use than APIs based on a ring interface (e.g., netmap)
 * Support for multiple device queues and multiple threads
-* Super fast, easily achieves 10 Mpps (million packets per second) per CPU core. Performance will be improved further once we have a batched API (see wish list).
+* Super fast, easily achieves 12 Mpps (million packets per second) per CPU core (TODO: why isn't it faster?)
 * Super simple to use: no dependencies, no annoying drivers to load, bind, or manage - see step-by-step tutorial below
 * BSD license
 
 # Supported hardware
-Only tested on an Intel 82599ES (Intel X520-T2) at the moment.
-Support/testing on X540, X550, and X552/X557 (Xeon D embedded NIC) is planned.
+Tested on an Intel 82599ES (aka Intel X520), X540, and X550. Might not work on all variants of these NICs because our link setup code is a little bit dodgy.
 
 # How does it work?
 TODO. For now: read the code, it has comments referring to relevant sections of the [Intel 82599 datasheet](https://www.intel.com/content/dam/www/public/us/en/documents/datasheets/82599-10-gbe-controller-datasheet.pdf).
@@ -38,7 +37,9 @@ TODO. For now: read the code, it has comments referring to relevant sections of 
 # Compiling ixy and running the examples
 
 ### Caution
-**Running ixy will unbind the driver of the given PCIe device without checking if it is in use**. This means the NIC will disappear from the system. Do not run this on NICs that you need.
+**Your NIC has full DMA access to your memory. A misconfigured NIC will cause memory corruptions that might crash your server or even destroy your filesystem**. Do not run this on any systems that have anything remotely important on them, especially if you want to modify the driver. Our version is also not necessarily safe and might be buggy. You have been warned.
+
+**Running ixy will unbind the driver of the given PCIe device without checking if it is in use.** This means the NIC will disappear from the system. Do not run this on NICs that you need.
 
 1. Install the following dependencies
 	* gcc >= 4.8
@@ -88,16 +89,6 @@ Various 1 Gbit/s NICs are good candidates.
 
 NICs that rely too much on firmware (e.g., Intel XL710) are not fun, because you end up only talking to a firmware that does everything.
 The same is true for NICs like the ones by Mellanox that keep a lot of magic in kernel modules, even when being used by frameworks like DPDK.
-
-### Batched RX/TX APIs
-
-TX performance is currently bottlenecked at around 10 Mpps because we need to access the PCIe address space for every packet.
-This is a hardware bottleneck in the NICs, multiple threads/queues don't help.
-DPDK hits the same bottleneck when using a batch size of 1.
-
-A batch API adds some complexity to the rx/tx functions.
-It should probably be based on explicit batching by the user and look similar to the DPDK API.
-Implicit batching requires regular callbacks to make sure that no packets get stuck in it.
 
 ### NUMA support
 DMA memory should be pinned to the correct NUMA node.
