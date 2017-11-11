@@ -2,7 +2,11 @@
 #define IXY_MEMORY_H
 
 #include <stdint.h>
+#include <stdbool.h>
 #include <unistd.h>
+
+static const int HUGE_PAGE_BITS = 21;
+static const int HUGE_PAGE_SIZE = (1 << 21);
 
 struct pkt_buf {
 	// physical address to pass a buffer to a nic
@@ -13,9 +17,9 @@ struct pkt_buf {
 	uint8_t data[] __attribute__((aligned(64)));
 };
 
+// everything here contains virtual addresses, the mapping to physical addresses are in the pkt_buf
 struct mempool {
 	void* base_addr;
-	uintptr_t base_addr_phy;
 	uint32_t buf_size;
 	uint32_t num_entries;
 	// memory is managed via a simple stack
@@ -30,7 +34,7 @@ struct dma_memory {
 	uintptr_t phy;
 };
 
-struct dma_memory memory_allocate_dma(size_t size);
+struct dma_memory memory_allocate_dma(size_t size, bool require_contiguous);
 
 struct mempool* memory_allocate_mempool(uint32_t num_entries, uint32_t entry_size);
 uint32_t pkt_buf_alloc_batch(struct mempool* mempool, struct pkt_buf* bufs[], uint32_t num_bufs);
