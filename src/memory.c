@@ -12,7 +12,7 @@
 static uintptr_t virt_to_phys(void* virt) {
 	long pagesize = sysconf(_SC_PAGESIZE);
 	int fd = check_err(open("/proc/self/pagemap", O_RDONLY), "getting pagemap");
-	// pagemap is an array of pointers for each 4096 byte page
+	// pagemap is an array of pointers for each normal-sized page
 	check_err(lseek(fd, (uintptr_t) virt / pagesize * sizeof(uintptr_t), SEEK_SET), "getting pagemap");
 	uintptr_t phy = 0;
 	check_err(read(fd, &phy, sizeof(phy)), "translating address");
@@ -31,13 +31,17 @@ static uint32_t huge_pg_id;
 // (not using anonymous hugepages because madvise might fail in subtle ways with some kernel configurations)
 // caution: very wasteful when allocating small chunks
 // this could be fixed by co-locating allocations on the same page until a request would be too large
-struct dma_memory memory_allocate_dma(size_t size) {
+struct dma_memory memory_allocate_dma(size_t size, bool require_contiguous) {
 	// round up to multiples of 2 MB if necessary, this is the wasteful part
 	// when fixing this: make sure to align on 128 byte boundaries (82599 dma requirement)
-	if (size % (1 << 21)) {
-		size = ((size >> 21) + 1) << 21;
+	if (size % HUGE_PAGE_SIZE) {
+		size = ((size >> HUGE_PAGE_BITS) + 1) << HUGE_PAGE_BITS;
 	}
-	// C11 stdatomic.h requires a too recent gcc, we want to support gcc 4.8
+	if (require_contiguous && size > HUGE_PAGE_SIZE) {
+		// this is the place to implement larger contiguous physical mappings if that's ever needed
+		error("could not map physically contiguous memory");
+	}
+	// unique filename, C11 stdatomic.h requires a too recent gcc, we want to support gcc 4.8
 	uint32_t id = __sync_fetch_and_add(&huge_pg_id, 1);
 	char path[PATH_MAX];
 	snprintf(path, PATH_MAX, "/mnt/huge/ixy-%d-%d", getpid(), id);
@@ -62,17 +66,23 @@ struct dma_memory memory_allocate_dma(size_t size) {
 // entry_size can be 0 to use the default
 struct mempool* memory_allocate_mempool(uint32_t num_entries, uint32_t entry_size) {
 	entry_size = entry_size ? entry_size : 2048;
+	// require entries that neatly fit into the page size, this makes the memory pool much easier
+	// otherwise our base_addr + index * size formula would be wrong because we can't cross a page-boundary
+	if (HUGE_PAGE_SIZE % entry_size) {
+		error("entry size must be a divisor of the huge page size (%d)", HUGE_PAGE_SIZE);
+	}
 	struct mempool* mempool = (struct mempool*) malloc(sizeof(struct mempool) + num_entries * sizeof(uint32_t));
-	struct dma_memory mem = memory_allocate_dma(num_entries * entry_size);
+	struct dma_memory mem = memory_allocate_dma(num_entries * entry_size, false);
 	mempool->num_entries = num_entries;
 	mempool->buf_size = entry_size;
-	mempool->base_addr_phy = mem.phy;
 	mempool->base_addr = mem.virt;
 	mempool->free_stack_top = num_entries;
 	for (uint32_t i = 0; i < num_entries; i++) {
 		mempool->free_stack[i] = i;
 		struct pkt_buf* buf = (struct pkt_buf*) (((uint8_t*) mempool->base_addr) + i * entry_size);
-		buf->buf_addr_phy = mempool->base_addr_phy + i * entry_size;
+		// physical addresses are not contiguous within a pool, we need to get the mapping
+		// minor optimization opportunity: this only needs to be done once per page
+		buf->buf_addr_phy = virt_to_phys(buf);
 		buf->mempool_idx = i;
 		buf->mempool = mempool;
 		buf->size = 0;
