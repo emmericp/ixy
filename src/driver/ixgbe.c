@@ -188,11 +188,14 @@ static void init_tx(struct ixy_device* dev) {
 		debug("tx ring %d phy addr:  0x%012lX", i, mem.phy);
 		debug("tx ring %d virt addr: 0x%012lX", i, (uintptr_t) mem.virt);
 
-		// descriptor writeback magic values, defaults from DPDK
-		// no fancy prefetching, it's also disabled by default in DPDK
+		// descriptor writeback magic values, important to get good performance and low PCIe overhead
+		// see 7.2.3.4.1 and 7.2.3.5 for an explanation of these values and how to find good ones
+		// we just use the defaults from DPDK here, but this is a potentially interesting point for optimizations
 		uint32_t txdctl = get_reg32(dev, IXGBE_TXDCTL(i));
-		txdctl &= ~(0x3F);
-		txdctl |= 32;
+		// there are no defines for this in ixgbe_type.h for some reason
+		// pthresh: 6:0, hthresh: 14:8, wthresh: 22:16
+		txdctl &= ~(0x3F | (0x3F << 8) | (0x3F << 16)); // clear bits
+		txdctl |= (36 | (8 << 8) | (4 << 16)); // from DPDK
 		set_reg32(dev, IXGBE_TXDCTL(i), txdctl);
 
 		// private data for the driver, 0-initialized
