@@ -5,8 +5,8 @@
 #include <stdbool.h>
 #include <unistd.h>
 
-static const int HUGE_PAGE_BITS = 21;
-static const int HUGE_PAGE_SIZE = (1 << 21);
+#define HUGE_PAGE_BITS 21
+#define HUGE_PAGE_SIZE (1 << HUGE_PAGE_BITS)
 
 struct pkt_buf {
 	// physical address to pass a buffer to a nic
