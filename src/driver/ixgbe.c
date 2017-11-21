@@ -175,7 +175,7 @@ static void init_tx(struct ixy_device* dev) {
 	clear_flags32(dev, IXGBE_RTTDCS, IXGBE_RTTDCS_ARBDIS);
 
 	// per-queue config for all queues
-	for (uint16_t i = 0; i < dev->num_rx_queues; i++) {
+	for (uint16_t i = 0; i < dev->num_tx_queues; i++) {
 		debug("initializing tx queue %d", i);
 
 		// setup descriptor ring, see section 7.1.9
