@@ -10,7 +10,7 @@ uint32_t ixgbe_get_link_speed(const struct ixy_device* dev);
 void ixgbe_set_promisc(struct ixy_device* dev, bool enabled);
 void ixgbe_read_stats(struct ixy_device* dev, struct device_stats* stats);
 uint32_t ixgbe_tx_batch(struct ixy_device* dev, uint16_t queue_id, struct pkt_buf* bufs[], uint32_t num_bufs);
-struct pkt_buf* ixgbe_rx_packet(struct ixy_device* dev, uint16_t queue_id);
+uint32_t ixgbe_rx_batch(struct ixy_device* dev, uint16_t queue_id, struct pkt_buf* bufs[], uint32_t num_bufs);
 
 // calls ixgbe_tx_batch until all packets are queued with busy waiting
 static void ixgbe_tx_batch_busy_wait(struct ixy_device* dev, uint16_t queue_id, struct pkt_buf* bufs[], uint32_t num_bufs) {
