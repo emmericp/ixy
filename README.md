@@ -1,11 +1,12 @@
 # ixy - a userspace network driver in 1000 lines of code
 
 ixy is a simple userspace packet processing framework.
-It takes exclusive control of a network device and implements the *whole driver* in userspace.
+It takes exclusive control of a network adapter and implements the *whole driver* in userspace.
 Its architecture is similar to [DPDK](http://dpdk.org/) and [Snabb](http://snabb.co) and completely different from (seemingly similar) frameworks such as netmap, pfq, pf_ring, or XDP (all of which rely on kernel components).
 
 In fact, reading both DPDK and Snabb drivers was crucial to understand some parts of the [Intel 82599 datasheet](https://www.intel.com/content/dam/www/public/us/en/documents/datasheets/82599-10-gbe-controller-datasheet.pdf) better.
 
+Check out the [draft of our paper](https://www.net.in.tum.de/fileadmin/bibtex/publications/papers/ixy_paper_short_draft1.pdf) to learn more.
 
 ixy is designed for educational purposes to learn how a network card works at the driver level.
 Lack of kernel code and external libraries allows you to look through the whole code from startup to the lowest level of the driver.
@@ -19,12 +20,12 @@ You will be surprised how simple a full driver for a network card can be.
 
 
 # Features
-* Driver for Intel NICs in the `ixgbe` family (e.g., Intel X520/82599)
-* Less than 1000 lines of C code for the full framework *including the driver*
+* Driver for Intel NICs in the `ixgbe` family, i.e., the 82599ES family (aka Intel X520)
+* Less than 1000 lines of C code for a packet forwarder including the whole driver
 * No kernel modules needed
 * Simple API with memory management, similar to DPDK, easier to use than APIs based on a ring interface (e.g., netmap)
 * Support for multiple device queues and multiple threads
-* Super fast, easily achieves 12 Mpps (million packets per second) per CPU core (TODO: why isn't it faster?)
+* Super fast, can forward > 25 million packets per second on a single 3.0 GHz CPU core
 * Super simple to use: no dependencies, no annoying drivers to load, bind, or manage - see step-by-step tutorial below
 * BSD license
 
@@ -32,14 +33,19 @@ You will be surprised how simple a full driver for a network card can be.
 Tested on an Intel 82599ES (aka Intel X520), X540, and X550. Might not work on all variants of these NICs because our link setup code is a little bit dodgy.
 
 # How does it work?
-TODO. For now: read the code, it has comments referring to relevant sections of the [Intel 82599 datasheet](https://www.intel.com/content/dam/www/public/us/en/documents/datasheets/82599-10-gbe-controller-datasheet.pdf).
+Check out the [draft of our paper](https://www.net.in.tum.de/fileadmin/bibtex/publications/papers/ixy_paper_short_draft1.pdf).
+
+If you prefer to dive into the code: Start by reading the apps in [src/app](https://github.com/emmericp/ixy/tree/master/src/app) then follow the function calls into the driver. The comments in the code refer to the [Intel 82599 datasheet](https://www.intel.com/content/dam/www/public/us/en/documents/datasheets/82599-10-gbe-controller-datasheet.pdf) (Revision 3.3, March 2016).
+
+
 
 # Compiling ixy and running the examples
 
 ### Caution
-**Your NIC has full DMA access to your memory. A misconfigured NIC will cause memory corruptions that might crash your server or even destroy your filesystem**. Do not run this on any systems that have anything remotely important on them, especially if you want to modify the driver. Our version is also not necessarily safe and might be buggy. You have been warned.
+**Your NIC has full DMA access to your memory. A misconfigured NIC will cause memory corruptions that might crash your server or even destroy your filesystem**. Do not run this on any systems that have anything remotely important on them if you want to modify the driver. Our version is also not necessarily safe and might be buggy. You have been warned.
 
 **Running ixy will unbind the driver of the given PCIe device without checking if it is in use.** This means the NIC will disappear from the system. Do not run this on NICs that you need.
+We currently don't check if the device is actually a supported NIC, trying to use another device will crash your system.
 
 1. Install the following dependencies
 	* gcc >= 4.8
@@ -67,7 +73,7 @@ TODO. For now: read the code, it has comments referring to relevant sections of 
 4. That's it! You can now run the included examples, e.g.:
 
 	```
-	sudo ./ixy-pktgen 0000:03:00.0
+	sudo ./ixy-pktgen 0000:XX:YY.Z
 	```
 	
 	Replace the PCI address as needed. All examples expect fully qualified PCIe bus addresses, i.e., typically prefixed with `0000:`, as arguments.
@@ -85,20 +91,20 @@ The list is in no particular order.
 ### Implement at least one other driver beside ixgbe
 
 To showcase how to make the framework more independent from the used hardware.
-Various 1 Gbit/s NICs are good candidates.
+Virtual NICs like VirtIO are a good candidate to build a simple VM-based environment.
 
 NICs that rely too much on firmware (e.g., Intel XL710) are not fun, because you end up only talking to a firmware that does everything.
 The same is true for NICs like the ones by Mellanox that keep a lot of magic in kernel modules, even when being used by frameworks like DPDK.
 
 ### NUMA support
+PCIe devices are attached to a specific CPU in NUMA systems.
 DMA memory should be pinned to the correct NUMA node.
 Threads handling packet reception should also be pinned to the same NUMA node.
-Less important for transmission.
+
 
 ### RSS support
 What's the point of having multiple rx queues if there is no good way to distribute the traffic to them?
-
-Shouldn't be too hard.
+Shouldn't be too hard. See Section 7.1.2.8 in the datasheet.
 
 ### `tcpdump`-like example
 A simple rx-only app that writes packets to a `.pcap` file based on `mmap` and `fallocate`.
@@ -129,7 +135,7 @@ But it's nice to have all the struct definitions right there when implementing a
 Another interesting approach to making these values available is writing a parser for the tables in the datasheet.
 [Snabb does this.](https://github.com/snabbco/snabb/blob/master/src/lib/hardware/register.lua)
 
-## Should I use this for my app?
+## Should I use this for my production app?
 No.
 
 ## When should I use this?
