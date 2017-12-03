@@ -126,6 +126,9 @@ The good news is that multi-threaded mempools are essentially the same problem a
 It's the lowest common denominator that everyone should be able to understand -- this is for educational purposes only.
 I've taken care to keep the code simple and understandable.
 
+## I can't get line rate :(
+We are currently facing a weird problem that impacts performance if your CPU is too fast. DPDK had the same problem in the past. Try applying bidirectional traffic to the forwarder and/or *underclock* your CPU to speed up ixy.
+
 ## It's more than ~1000 lines! There is a huge `ixgbe_type.h` file.
 `ixgbe_type.h` is copied from the Intel driver, it's only used as a machine-readable version of the datasheet.
 ixy only uses `#define` definitions for registers and the two relatively simple structs for the DMA descriptors.
