@@ -3,10 +3,9 @@
 ixy is a simple userspace packet processing framework.
 It takes exclusive control of a network adapter and implements the *whole driver* in userspace.
 Its architecture is similar to [DPDK](http://dpdk.org/) and [Snabb](http://snabb.co) and completely different from (seemingly similar) frameworks such as netmap, pfq, pf_ring, or XDP (all of which rely on kernel components).
-
 In fact, reading both DPDK and Snabb drivers was crucial to understand some parts of the [Intel 82599 datasheet](https://www.intel.com/content/dam/www/public/us/en/documents/datasheets/82599-10-gbe-controller-datasheet.pdf) better.
 
-Check out the [draft of our paper](https://www.net.in.tum.de/fileadmin/bibtex/publications/papers/ixy_paper_short_draft1.pdf) to learn more.
+Check out the [draft of our paper](https://www.net.in.tum.de/fileadmin/bibtex/publications/papers/ixy_paper_short_draft1.pdf) or [watch the recording of our talk at 34C3](https://media.ccc.de/v/34c3-9159-demystifying_network_cards) to learn more.
 
 ixy is designed for educational purposes to learn how a network card works at the driver level.
 Lack of kernel code and external libraries allows you to look through the whole code from startup to the lowest level of the driver.
