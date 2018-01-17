@@ -61,16 +61,16 @@ static inline void ixy_set_promisc(struct ixy_device* dev, bool enabled) {
 	dev->set_promisc(dev, enabled);
 }
 
+static inline uint32_t get_link_speed(const struct ixy_device* dev) {
+	return dev->get_link_speed(dev);
+}
+
 // calls ixy_tx_batch until all packets are queued with busy waiting
 static void ixy_tx_batch_busy_wait(struct ixy_device* dev, uint16_t queue_id, struct pkt_buf* bufs[], uint32_t num_bufs) {
 	uint32_t num_sent = 0;
 	while ((num_sent += ixy_tx_batch(dev, 0, bufs + num_sent, num_bufs - num_sent)) != num_bufs) {
 		// busy wait
 	}
-}
-
-static inline uint32_t get_link_speed(const struct ixy_device* dev) {
-	return dev->get_link_speed(dev);
 }
 
 // getters/setters for PCIe memory mapped registers
@@ -117,4 +117,48 @@ static inline void wait_set_reg32(const uint8_t* addr, int reg, uint32_t mask) {
 	}
 }
 
-#endif //IXY_DEVICE_H
+// getters/setters for pci io port resources
+
+static inline void write_io32(int fd, uint32_t value, size_t offset) {
+	if (pwrite(fd, &value, sizeof(value), offset) != sizeof(value))
+		error("pwrite io resource");
+	__asm__ volatile("" : : : "memory");
+}
+
+static inline void write_io16(int fd, uint16_t value, size_t offset) {
+	if (pwrite(fd, &value, sizeof(value), offset) != sizeof(value))
+		error("pwrite io resource");
+	__asm__ volatile("" : : : "memory");
+}
+
+static inline void write_io8(int fd, uint8_t value, size_t offset) {
+	if (pwrite(fd, &value, sizeof(value), offset) != sizeof(value))
+		error("pwrite io resource");
+	__asm__ volatile("" : : : "memory");
+}
+
+static inline uint32_t read_io32(int fd, size_t offset) {
+	__asm__ volatile("" : : : "memory");
+	uint32_t temp;
+	if (pread(fd, &temp, sizeof(temp), offset) != sizeof(temp))
+		error("pread io resource");
+	return temp;
+}
+
+static inline uint16_t read_io16(int fd, size_t offset) {
+	__asm__ volatile("" : : : "memory");
+	uint16_t temp;
+	if (pread(fd, &temp, sizeof(temp), offset) != sizeof(temp))
+		error("pread io resource");
+	return temp;
+}
+
+static inline uint8_t read_io8(int fd, size_t offset) {
+	__asm__ volatile("" : : : "memory");
+	uint8_t temp;
+	if (pread(fd, &temp, sizeof(temp), offset) != sizeof(temp))
+		error("pread io resource");
+	return temp;
+}
+
+#endif // IXY_DEVICE_H
