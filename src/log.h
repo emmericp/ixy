@@ -38,9 +38,9 @@
 		int err = errno;\
 		char buf[512];\
 		strerror_r(err, buf, sizeof(buf));\
-        fprintf(stderr, "[ERROR] %s:%d %s(): Failed to %s: %s\n", __FILE__, __LINE__, __func__, op, buf);\
+		fprintf(stderr, "[ERROR] %s:%d %s(): Failed to %s: %s\n", __FILE__, __LINE__, __func__, op, buf);\
 		exit(err);\
-    }\
+	}\
 	result;\
 })
 

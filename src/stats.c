@@ -25,8 +25,8 @@ void print_stats_diff(struct device_stats* stats_new, struct device_stats* stats
 		diff_mpps(stats_new->rx_pkts, stats_old->rx_pkts, nanos)
 	);
 	printf("[%s] TX: %d Mbit/s %.2f Mpps\n", stats_new->device ? stats_new->device->pci_addr : "???",
-	       diff_mbit(stats_new->tx_bytes, stats_old->tx_bytes, stats_new->tx_pkts, stats_old->tx_pkts, nanos),
-	       diff_mpps(stats_new->tx_pkts, stats_old->tx_pkts, nanos)
+		diff_mbit(stats_new->tx_bytes, stats_old->tx_bytes, stats_new->tx_pkts, stats_old->tx_pkts, nanos),
+		diff_mpps(stats_new->tx_pkts, stats_old->tx_pkts, nanos)
 	);
 }
 
