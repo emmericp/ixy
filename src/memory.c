@@ -28,11 +28,11 @@ static uint32_t huge_pg_id;
 
 // allocate memory suitable for DMA access in huge pages
 // this requires hugetlbfs to be mounted at /mnt/huge
-// (not using anonymous hugepages because madvise might fail in subtle ways with some kernel configurations)
-// caution: very wasteful when allocating small chunks
-// this could be fixed by co-locating allocations on the same page until a request would be too large
+// not using anonymous hugepages because hugetlbfs can give us multiple pages with contiguous virtual addresses
+// allocating anonymous pages would require manual remapping which is more annoying than handling files
 struct dma_memory memory_allocate_dma(size_t size, bool require_contiguous) {
 	// round up to multiples of 2 MB if necessary, this is the wasteful part
+	// this could be fixed by co-locating allocations on the same page until a request would be too large
 	// when fixing this: make sure to align on 128 byte boundaries (82599 dma requirement)
 	if (size % HUGE_PAGE_SIZE) {
 		size = ((size >> HUGE_PAGE_BITS) + 1) << HUGE_PAGE_BITS;
