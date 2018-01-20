@@ -28,6 +28,8 @@ static void enable_dma(const char* pci_addr) {
 	char path[PATH_MAX];
 	snprintf(path, PATH_MAX, "/sys/bus/pci/devices/%s/config", pci_addr);
 	int fd = check_err(open(path, O_RDWR), "open pci config");
+	// write to the command register (offset 4) in the PCIe config space
+	// bit 2 is "bus master enable", see PCIe 3.0 specification section 7.5.1.1
 	assert(lseek(fd, 4, SEEK_SET) == 4);
 	uint16_t dma = 0;
 	assert(read(fd, &dma, 2) == 2);
@@ -43,7 +45,6 @@ uint8_t* pci_map_resource(const char* pci_addr) {
 	remove_driver(pci_addr);
 	enable_dma(pci_addr);
 	int fd = check_err(open(path, O_RDWR), "open pci resource");
-	//check_err(flock(fd, LOCK_EX | LOCK_NB), "locking pci resource");
 	struct stat stat;
 	check_err(fstat(fd, &stat), "stat pci resource");
 	return (uint8_t*) check_err(mmap(NULL, stat.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0), "mmap pci resource");
