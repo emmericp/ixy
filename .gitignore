@@ -8,5 +8,9 @@ Makefile
 # vim
 .*.s[a-z][a-z]
 
+# vscode
+*.idea
+
+build
 ixy-fwd
 ixy-pktgen
