@@ -44,16 +44,16 @@ struct ixgbe_tx_queue {
 };
 
 // see section 4.6.4
-static void init_link(struct ixy_device* dev) {
+static void init_link(struct ixgbe_device* dev) {
 	// should already be set by the eeprom config, maybe we shouldn't override it here to support weirdo nics?
-	set_reg32(dev, IXGBE_AUTOC, (get_reg32(dev, IXGBE_AUTOC) & ~IXGBE_AUTOC_LMS_MASK) | IXGBE_AUTOC_LMS_10G_SERIAL);
-	set_reg32(dev, IXGBE_AUTOC, (get_reg32(dev, IXGBE_AUTOC) & ~IXGBE_AUTOC_10G_PMA_PMD_MASK) | IXGBE_AUTOC_10G_XAUI);
+	set_reg32(dev->addr, IXGBE_AUTOC, (get_reg32(dev->addr, IXGBE_AUTOC) & ~IXGBE_AUTOC_LMS_MASK) | IXGBE_AUTOC_LMS_10G_SERIAL);
+	set_reg32(dev->addr, IXGBE_AUTOC, (get_reg32(dev->addr, IXGBE_AUTOC) & ~IXGBE_AUTOC_10G_PMA_PMD_MASK) | IXGBE_AUTOC_10G_XAUI);
 	// negotiate link
-	set_flags32(dev, IXGBE_AUTOC, IXGBE_AUTOC_AN_RESTART);
+	set_flags32(dev->addr, IXGBE_AUTOC, IXGBE_AUTOC_AN_RESTART);
 	// datasheet wants us to wait for the link here, but we can continue and wait afterwards
 }
 
-static void start_rx_queue(struct ixy_device* dev, int queue_id) {
+static void start_rx_queue(struct ixgbe_device* dev, int queue_id) {
 	debug("starting rx queue %d", queue_id);
 	struct ixgbe_rx_queue* queue = ((struct ixgbe_rx_queue*)(dev->rx_queues)) + queue_id;
 	// 2048 as pktbuf size is strictly speaking incorrect:
@@ -78,68 +78,68 @@ static void start_rx_queue(struct ixy_device* dev, int queue_id) {
 		queue->virtual_addresses[i] = buf;
 	}
 	// enable queue and wait if necessary
-	set_flags32(dev, IXGBE_RXDCTL(queue_id), IXGBE_RXDCTL_ENABLE);
-	wait_set_reg32(dev, IXGBE_RXDCTL(queue_id), IXGBE_RXDCTL_ENABLE);
+	set_flags32(dev->addr, IXGBE_RXDCTL(queue_id), IXGBE_RXDCTL_ENABLE);
+	wait_set_reg32(dev->addr, IXGBE_RXDCTL(queue_id), IXGBE_RXDCTL_ENABLE);
 	// rx queue starts out full
-	set_reg32(dev, IXGBE_RDH(queue_id), 0);
+	set_reg32(dev->addr, IXGBE_RDH(queue_id), 0);
 	// was set to 0 before in the init function
-	set_reg32(dev, IXGBE_RDT(queue_id), queue->num_entries - 1);
+	set_reg32(dev->addr, IXGBE_RDT(queue_id), queue->num_entries - 1);
 }
 
-static void start_tx_queue(struct ixy_device* dev, int queue_id) {
+static void start_tx_queue(struct ixgbe_device* dev, int queue_id) {
 	debug("starting tx queue %d", queue_id);
 	struct ixgbe_tx_queue* queue = ((struct ixgbe_tx_queue*)(dev->tx_queues)) + queue_id;
 	if (queue->num_entries & (queue->num_entries - 1)) {
 		error("number of queue entries must be a power of 2");
 	}
 	// tx queue starts out empty
-	set_reg32(dev, IXGBE_TDH(queue_id), 0);
-	set_reg32(dev, IXGBE_TDT(queue_id), 0);
+	set_reg32(dev->addr, IXGBE_TDH(queue_id), 0);
+	set_reg32(dev->addr, IXGBE_TDT(queue_id), 0);
 	// enable queue and wait if necessary
-	set_flags32(dev, IXGBE_TXDCTL(queue_id), IXGBE_TXDCTL_ENABLE);
-	wait_set_reg32(dev, IXGBE_TXDCTL(queue_id), IXGBE_TXDCTL_ENABLE);
+	set_flags32(dev->addr, IXGBE_TXDCTL(queue_id), IXGBE_TXDCTL_ENABLE);
+	wait_set_reg32(dev->addr, IXGBE_TXDCTL(queue_id), IXGBE_TXDCTL_ENABLE);
 }
 
 // see section 4.6.7
 // it looks quite complicated in the data sheet, but it's actually really easy because we don't need fancy features
-static void init_rx(struct ixy_device* dev) {
+static void init_rx(struct ixgbe_device* dev) {
 	// make sure that rx is disabled while re-configuring it
 	// the datasheet also wants us to disable some crypto-offloading related rx paths (but we don't care about them)
-	clear_flags32(dev, IXGBE_RXCTRL, IXGBE_RXCTRL_RXEN);
+	clear_flags32(dev->addr, IXGBE_RXCTRL, IXGBE_RXCTRL_RXEN);
 	// no fancy dcb or vt, just a single 128kb packet buffer for us
-	set_reg32(dev, IXGBE_RXPBSIZE(0), IXGBE_RXPBSIZE_128KB);
+	set_reg32(dev->addr, IXGBE_RXPBSIZE(0), IXGBE_RXPBSIZE_128KB);
 	for (int i = 1; i < 8; i++) {
-		set_reg32(dev, IXGBE_RXPBSIZE(i), 0);
+		set_reg32(dev->addr, IXGBE_RXPBSIZE(i), 0);
 	}
 
 	// always enable CRC offloading
-	set_flags32(dev, IXGBE_HLREG0, IXGBE_HLREG0_RXCRCSTRP);
-	set_flags32(dev, IXGBE_RDRXCTL, IXGBE_RDRXCTL_CRCSTRIP);
+	set_flags32(dev->addr, IXGBE_HLREG0, IXGBE_HLREG0_RXCRCSTRP);
+	set_flags32(dev->addr, IXGBE_RDRXCTL, IXGBE_RDRXCTL_CRCSTRIP);
 
 	// accept broadcast packets
-	set_flags32(dev, IXGBE_FCTRL, IXGBE_FCTRL_BAM);
+	set_flags32(dev->addr, IXGBE_FCTRL, IXGBE_FCTRL_BAM);
 
 	// per-queue config, same for all queues
 	for (uint16_t i = 0; i < dev->num_rx_queues; i++) {
 		debug("initializing rx queue %d", i);
 		// enable advanced rx descriptors, we could also get away with legacy descriptors, but they aren't really easier
-		set_reg32(dev, IXGBE_SRRCTL(i), (get_reg32(dev, IXGBE_SRRCTL(i)) & ~IXGBE_SRRCTL_DESCTYPE_MASK) | IXGBE_SRRCTL_DESCTYPE_ADV_ONEBUF);
+		set_reg32(dev->addr, IXGBE_SRRCTL(i), (get_reg32(dev->addr, IXGBE_SRRCTL(i)) & ~IXGBE_SRRCTL_DESCTYPE_MASK) | IXGBE_SRRCTL_DESCTYPE_ADV_ONEBUF);
 		// drop_en causes the nic to drop packets if no rx descriptors are available instead of buffering them
 		// a single overflowing queue can fill up the whole buffer and impact operations if not setting this flag
-		set_flags32(dev, IXGBE_SRRCTL(i), IXGBE_SRRCTL_DROP_EN);
+		set_flags32(dev->addr, IXGBE_SRRCTL(i), IXGBE_SRRCTL_DROP_EN);
 		// setup descriptor ring, see section 7.1.9
 		uint32_t ring_size_bytes = NUM_RX_QUEUE_ENTRIES * sizeof(union ixgbe_adv_rx_desc);
 		struct dma_memory mem = memory_allocate_dma(ring_size_bytes, true);
 		// neat trick from Snabb: initialize to 0xFF to prevent rogue memory accesses on premature DMA activation
 		memset(mem.virt, -1, ring_size_bytes);
-		set_reg32(dev, IXGBE_RDBAL(i), (uint32_t) (mem.phy & 0xFFFFFFFFull));
-		set_reg32(dev, IXGBE_RDBAH(i), (uint32_t) (mem.phy >> 32));
-		set_reg32(dev, IXGBE_RDLEN(i), ring_size_bytes);
+		set_reg32(dev->addr, IXGBE_RDBAL(i), (uint32_t) (mem.phy & 0xFFFFFFFFull));
+		set_reg32(dev->addr, IXGBE_RDBAH(i), (uint32_t) (mem.phy >> 32));
+		set_reg32(dev->addr, IXGBE_RDLEN(i), ring_size_bytes);
 		debug("rx ring %d phy addr:  0x%012lX", i, mem.phy);
 		debug("rx ring %d virt addr: 0x%012lX", i, (uintptr_t) mem.virt);
 		// set ring to empty at start
-		set_reg32(dev, IXGBE_RDH(i), 0);
-		set_reg32(dev, IXGBE_RDT(i), 0);
+		set_reg32(dev->addr, IXGBE_RDH(i), 0);
+		set_reg32(dev->addr, IXGBE_RDT(i), 0);
 		// private data for the driver, 0-initialized
 		struct ixgbe_rx_queue* queue = ((struct ixgbe_rx_queue*)(dev->rx_queues)) + i;
 		queue->num_entries = NUM_RX_QUEUE_ENTRIES;
@@ -148,31 +148,31 @@ static void init_rx(struct ixy_device* dev) {
 	}
 
 	// last step is to set some magic bits mentioned in the last sentence in 4.6.7
-	set_flags32(dev, IXGBE_CTRL_EXT, IXGBE_CTRL_EXT_NS_DIS);
+	set_flags32(dev->addr, IXGBE_CTRL_EXT, IXGBE_CTRL_EXT_NS_DIS);
 	// this flag probably refers to a broken feature: it's reserved and initialized as '1' but it must be set to '0'
 	// there isn't even a constant in ixgbe_types.h for this flag
 	for (uint16_t i = 0; i < dev->num_rx_queues; i++) {
-		clear_flags32(dev, IXGBE_DCA_RXCTRL(i), 1 << 12);
+		clear_flags32(dev->addr, IXGBE_DCA_RXCTRL(i), 1 << 12);
 	}
 
 	// start RX
-	set_flags32(dev, IXGBE_RXCTRL, IXGBE_RXCTRL_RXEN);
+	set_flags32(dev->addr, IXGBE_RXCTRL, IXGBE_RXCTRL_RXEN);
 }
 
 // see section 4.6.8
-static void init_tx(struct ixy_device* dev) {
+static void init_tx(struct ixgbe_device* dev) {
 	// crc offload and small packet padding
-	set_flags32(dev, IXGBE_HLREG0, IXGBE_HLREG0_TXCRCEN | IXGBE_HLREG0_TXPADEN);
+	set_flags32(dev->addr, IXGBE_HLREG0, IXGBE_HLREG0_TXCRCEN | IXGBE_HLREG0_TXPADEN);
 
 	// set default buffer size allocations
 	// see also: section 4.6.11.3.4, no fancy features like DCB and VTd
-	set_reg32(dev, IXGBE_TXPBSIZE(0), IXGBE_TXPBSIZE_40KB);
+	set_reg32(dev->addr, IXGBE_TXPBSIZE(0), IXGBE_TXPBSIZE_40KB);
 	for (int i = 1; i < 8; i++) {
-		set_reg32(dev, IXGBE_TXPBSIZE(i), 0);
+		set_reg32(dev->addr, IXGBE_TXPBSIZE(i), 0);
 	}
 	// required when not using DCB/VTd
-	set_reg32(dev, IXGBE_DTXMXSZRQ, 0xFFFF);
-	clear_flags32(dev, IXGBE_RTTDCS, IXGBE_RTTDCS_ARBDIS);
+	set_reg32(dev->addr, IXGBE_DTXMXSZRQ, 0xFFFF);
+	clear_flags32(dev->addr, IXGBE_RTTDCS, IXGBE_RTTDCS_ARBDIS);
 
 	// per-queue config for all queues
 	for (uint16_t i = 0; i < dev->num_tx_queues; i++) {
@@ -182,21 +182,21 @@ static void init_tx(struct ixy_device* dev) {
 		uint32_t ring_size_bytes = NUM_TX_QUEUE_ENTRIES * sizeof(union ixgbe_adv_tx_desc);
 		struct dma_memory mem = memory_allocate_dma(ring_size_bytes, true);
 		memset(mem.virt, -1, ring_size_bytes);
-		set_reg32(dev, IXGBE_TDBAL(i), (uint32_t) (mem.phy & 0xFFFFFFFFull));
-		set_reg32(dev, IXGBE_TDBAH(i), (uint32_t) (mem.phy >> 32));
-		set_reg32(dev, IXGBE_TDLEN(i), ring_size_bytes);
+		set_reg32(dev->addr, IXGBE_TDBAL(i), (uint32_t) (mem.phy & 0xFFFFFFFFull));
+		set_reg32(dev->addr, IXGBE_TDBAH(i), (uint32_t) (mem.phy >> 32));
+		set_reg32(dev->addr, IXGBE_TDLEN(i), ring_size_bytes);
 		debug("tx ring %d phy addr:  0x%012lX", i, mem.phy);
 		debug("tx ring %d virt addr: 0x%012lX", i, (uintptr_t) mem.virt);
 
 		// descriptor writeback magic values, important to get good performance and low PCIe overhead
 		// see 7.2.3.4.1 and 7.2.3.5 for an explanation of these values and how to find good ones
 		// we just use the defaults from DPDK here, but this is a potentially interesting point for optimizations
-		uint32_t txdctl = get_reg32(dev, IXGBE_TXDCTL(i));
+		uint32_t txdctl = get_reg32(dev->addr, IXGBE_TXDCTL(i));
 		// there are no defines for this in ixgbe_type.h for some reason
 		// pthresh: 6:0, hthresh: 14:8, wthresh: 22:16
 		txdctl &= ~(0x3F | (0x3F << 8) | (0x3F << 16)); // clear bits
 		txdctl |= (36 | (8 << 8) | (4 << 16)); // from DPDK
-		set_reg32(dev, IXGBE_TXDCTL(i), txdctl);
+		set_reg32(dev->addr, IXGBE_TXDCTL(i), txdctl);
 
 		// private data for the driver, 0-initialized
 		struct ixgbe_tx_queue* queue = ((struct ixgbe_tx_queue*)(dev->tx_queues)) + i;
@@ -204,50 +204,50 @@ static void init_tx(struct ixy_device* dev) {
 		queue->descriptors = (union ixgbe_adv_tx_desc*) mem.virt;
 	}
 	// final step: enable DMA
-	set_reg32(dev, IXGBE_DMATXCTL, IXGBE_DMATXCTL_TE);
+	set_reg32(dev->addr, IXGBE_DMATXCTL, IXGBE_DMATXCTL_TE);
 }
 
-static void wait_for_link(const struct ixy_device* dev) {
+static void wait_for_link(const struct ixgbe_device* dev) {
 	info("Waiting for link...");
 	int32_t max_wait = 10000000; // 10 seconds in us
 	uint32_t poll_interval = 100000; // 10 ms in us
 	uint32_t speed;
-	while (!(speed = ixgbe_get_link_speed(dev)) && max_wait > 0) {
+	while (!(speed = ixgbe_get_link_speed(&dev->ixy)) && max_wait > 0) {
 		usleep(poll_interval);
 		max_wait -= poll_interval;
 	}
-	info("Link speed is %d Mbit/s", ixgbe_get_link_speed(dev));
+	info("Link speed is %d Mbit/s", ixgbe_get_link_speed(&dev->ixy));
 }
 
 
 // see section 4.6.3
-static void reset_and_init(struct ixy_device* dev) {
+static void reset_and_init(struct ixgbe_device* dev) {
 	info("Resetting device %s", dev->pci_addr);
 	// section 4.6.3.1 - disable all interrupts
-	set_reg32(dev, IXGBE_EIMC, 0x7FFFFFFF);
+	set_reg32(dev->addr, IXGBE_EIMC, 0x7FFFFFFF);
 
 	// section 4.6.3.2
-	set_reg32(dev, IXGBE_CTRL, IXGBE_CTRL_RST_MASK);
-	wait_clear_reg32(dev, IXGBE_CTRL, IXGBE_CTRL_RST_MASK);
+	set_reg32(dev->addr, IXGBE_CTRL, IXGBE_CTRL_RST_MASK);
+	wait_clear_reg32(dev->addr, IXGBE_CTRL, IXGBE_CTRL_RST_MASK);
 	usleep(10000);
 
 	// section 4.6.3.1 - disable interrupts again after reset
-	set_reg32(dev, IXGBE_EIMC, 0x7FFFFFFF);
+	set_reg32(dev->addr, IXGBE_EIMC, 0x7FFFFFFF);
 
 	info("Initializing device %s", dev->pci_addr);
 
 	// section 4.6.3 - Wait for EEPROM auto read completion
-	wait_set_reg32(dev, IXGBE_EEC, IXGBE_EEC_ARD);
+	wait_set_reg32(dev->addr, IXGBE_EEC, IXGBE_EEC_ARD);
 
 	// section 4.6.3 - Wait for DMA initialization done (RDRXCTL.DMAIDONE)
-	wait_set_reg32(dev, IXGBE_RDRXCTL, IXGBE_RDRXCTL_DMAIDONE);
+	wait_set_reg32(dev->addr, IXGBE_RDRXCTL, IXGBE_RDRXCTL_DMAIDONE);
 
 	// section 4.6.4 - initialize link (auto negotiation)
 	init_link(dev);
 
 	// section 4.6.5 - statistical counters
 	// reset-on-read registers, just read them once
-	ixgbe_read_stats(dev, NULL);
+	ixgbe_read_stats(&dev->ixy, NULL);
 
 	// section 4.6.7 - init rx
 	init_rx(dev);
@@ -265,7 +265,7 @@ static void reset_and_init(struct ixy_device* dev) {
 
 	// skip last step from 4.6.3 - don't want interrupts
 	// finally, enable promisc mode by default, it makes testing less annoying
-	ixgbe_set_promisc(dev, true);
+	ixgbe_set_promisc(&dev->ixy, true);
 
 	// wait for some time for the link to come up
 	wait_for_link(dev);
@@ -281,20 +281,26 @@ struct ixy_device* ixgbe_init(const char* pci_addr, uint16_t rx_queues, uint16_t
 	if (tx_queues > MAX_QUEUES) {
 		error("cannot configure %d tx queues: limit is %d", tx_queues, MAX_QUEUES);
 	}
-	struct ixy_device* dev = (struct ixy_device*) malloc(sizeof(struct ixy_device));
-	dev->pci_addr = strdup(pci_addr);
-	dev->driver_name = driver_name;
+	struct ixgbe_device* dev = (struct ixgbe_device*) malloc(sizeof(struct ixgbe_device));
+	dev->ixy.pci_addr = strdup(pci_addr);
+	dev->ixy.driver_name = driver_name;
+	dev->ixy.num_rx_queues = rx_queues;
+	dev->ixy.num_tx_queues = tx_queues;
+	dev->ixy.rx_batch = ixgbe_rx_batch;
+	dev->ixy.tx_batch = ixgbe_tx_batch;
+	dev->ixy.read_stats = ixgbe_read_stats;
+	dev->ixy.set_promisc = ixgbe_set_promisc;
+	dev->ixy.get_link_speed = ixgbe_get_link_speed;
 	dev->addr = pci_map_resource(pci_addr);
-	dev->num_rx_queues = rx_queues;
-	dev->num_tx_queues = tx_queues;
 	dev->rx_queues = calloc(rx_queues, sizeof(struct ixgbe_rx_queue) + sizeof(void*) * MAX_RX_QUEUE_ENTRIES);
 	dev->tx_queues = calloc(rx_queues, sizeof(struct ixgbe_tx_queue) + sizeof(void*) * MAX_TX_QUEUE_ENTRIES);
 	reset_and_init(dev);
-	return dev;
+	return &dev->ixy;
 }
 
-uint32_t ixgbe_get_link_speed(const struct ixy_device* dev) {
-	uint32_t links = get_reg32(dev, IXGBE_LINKS);
+uint32_t ixgbe_get_link_speed(const struct ixy_device* ixy) {
+	struct ixgbe_device* dev = IXY_TO_IXGBE(ixy);
+	uint32_t links = get_reg32(dev->addr, IXGBE_LINKS);
 	if (!(links & IXGBE_LINKS_UP)) {
 		return 0;
 	}
@@ -310,24 +316,25 @@ uint32_t ixgbe_get_link_speed(const struct ixy_device* dev) {
 	}
 }
 
-void ixgbe_set_promisc(struct ixy_device* dev, bool enabled) {
+void ixgbe_set_promisc(struct ixy_device* ixy, bool enabled) {
+	struct ixgbe_device* dev = IXY_TO_IXGBE(ixy);	
 	if (enabled) {
 		info("enabling promisc mode");
-		set_flags32(dev, IXGBE_FCTRL, IXGBE_FCTRL_MPE | IXGBE_FCTRL_UPE);
+		set_flags32(dev->addr, IXGBE_FCTRL, IXGBE_FCTRL_MPE | IXGBE_FCTRL_UPE);
 	} else {
 		info("disabling promisc mode");
-		clear_flags32(dev, IXGBE_FCTRL, IXGBE_FCTRL_MPE | IXGBE_FCTRL_UPE);
+		clear_flags32(dev->addr, IXGBE_FCTRL, IXGBE_FCTRL_MPE | IXGBE_FCTRL_UPE);
 	}
 }
 
-
 // read stat counters and accumulate in stats
 // stats may be NULL to just reset the counters
-void ixgbe_read_stats(struct ixy_device* dev, struct device_stats* stats) {
-	uint32_t rx_pkts = get_reg32(dev, IXGBE_GPRC);
-	uint32_t tx_pkts = get_reg32(dev, IXGBE_GPTC);
-	uint64_t rx_bytes = get_reg32(dev, IXGBE_GORCL) + (((uint64_t) get_reg32(dev, IXGBE_GORCH)) << 32);
-	uint64_t tx_bytes = get_reg32(dev, IXGBE_GOTCL) + (((uint64_t) get_reg32(dev, IXGBE_GOTCH)) << 32);
+void ixgbe_read_stats(struct ixy_device* ixy, struct device_stats* stats) {
+	struct ixgbe_device* dev = IXY_TO_IXGBE(ixy);
+	uint32_t rx_pkts = get_reg32(dev->addr, IXGBE_GPRC);
+	uint32_t tx_pkts = get_reg32(dev->addr, IXGBE_GPTC);
+	uint64_t rx_bytes = get_reg32(dev->addr, IXGBE_GORCL) + (((uint64_t) get_reg32(dev->addr, IXGBE_GORCH)) << 32);
+	uint64_t tx_bytes = get_reg32(dev->addr, IXGBE_GOTCL) + (((uint64_t) get_reg32(dev->addr, IXGBE_GOTCH)) << 32);
 	if (stats) {
 		stats->rx_pkts += rx_pkts;
 		stats->tx_pkts += tx_pkts;
@@ -344,7 +351,8 @@ void ixgbe_read_stats(struct ixy_device* dev, struct device_stats* stats) {
 // try to receive a single packet if one is available, non-blocking
 // see datasheet section 7.1.9 for an explanation of the rx ring structure
 // tl;dr: we control the tail of the queue, the hardware the head
-uint32_t ixgbe_rx_batch(struct ixy_device* dev, uint16_t queue_id, struct pkt_buf* bufs[], uint32_t num_bufs) {
+uint32_t ixgbe_rx_batch(struct ixy_device* ixy, uint16_t queue_id, struct pkt_buf* bufs[], uint32_t num_bufs) {
+	struct ixgbe_device* dev = IXY_TO_IXGBE(ixy);
 	struct ixgbe_rx_queue* queue = ((struct ixgbe_rx_queue*)(dev->rx_queues)) + queue_id;
 	uint16_t rx_index = queue->rx_index; // rx index we checked in the last run of this function
 	uint16_t last_rx_index = rx_index; // index of the descriptor we checked in the last iteration of the loop
@@ -386,7 +394,7 @@ uint32_t ixgbe_rx_batch(struct ixy_device* dev, uint16_t queue_id, struct pkt_bu
 		// tell hardware that we are done
 		// this is intentionally off by one, otherwise we'd set RDT=RDH if we are receiving faster than packets are coming in
 		// RDT=RDH means queue is full
-		set_reg32(dev, IXGBE_RDT(queue_id), last_rx_index);
+		set_reg32(dev->addr, IXGBE_RDT(queue_id), last_rx_index);
 		queue->rx_index = rx_index;
 	}
 	return buf_index; // number of packets stored in bufs; buf_index points to the next index
@@ -396,7 +404,8 @@ uint32_t ixgbe_rx_batch(struct ixy_device* dev, uint16_t queue_id, struct pkt_bu
 // we control the tail, hardware the head
 // huge performance gains possible here by sending packets in batches - writing to TDT for every packet is not efficient
 // returns the number of packets transmitted, will not block when the queue is full
-uint32_t ixgbe_tx_batch(struct ixy_device* dev, uint16_t queue_id, struct pkt_buf* bufs[], uint32_t num_bufs) {
+uint32_t ixgbe_tx_batch(struct ixy_device* ixy, uint16_t queue_id, struct pkt_buf* bufs[], uint32_t num_bufs) {
+	struct ixgbe_device* dev = IXY_TO_IXGBE(ixy);
 	struct ixgbe_tx_queue* queue = ((struct ixgbe_tx_queue*)(dev->tx_queues)) + queue_id;
 	// the descriptor is explained in section 7.2.3.2.4
 	// we just use a struct copy & pasted from intel, but it basically has two formats (hence a union):
@@ -474,7 +483,7 @@ uint32_t ixgbe_tx_batch(struct ixy_device* dev, uint16_t queue_id, struct pkt_bu
 	}
 	// send out by advancing tail, i.e., pass control of the bufs to the nic
 	// this seems like a textbook case for a release memory order, but Intel's driver doesn't even use a compiler barrier here
-	set_reg32(dev, IXGBE_TDT(queue_id), queue->tx_index);
+	set_reg32(dev->addr, IXGBE_TDT(queue_id), queue->tx_index);
 	return sent;
 }
 
