@@ -7,11 +7,7 @@
 
 struct ixgbe_device {
     struct ixy_device ixy;
-    const char* pci_addr;
-    const char* driver_name;
     uint8_t* addr;
-    uint16_t num_rx_queues;
-    uint16_t num_tx_queues;
     void* rx_queues;
     void* tx_queues;
 };

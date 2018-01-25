@@ -120,7 +120,7 @@ static void init_rx(struct ixgbe_device* dev) {
 	set_flags32(dev->addr, IXGBE_FCTRL, IXGBE_FCTRL_BAM);
 
 	// per-queue config, same for all queues
-	for (uint16_t i = 0; i < dev->num_rx_queues; i++) {
+	for (uint16_t i = 0; i < dev->ixy.num_rx_queues; i++) {
 		debug("initializing rx queue %d", i);
 		// enable advanced rx descriptors, we could also get away with legacy descriptors, but they aren't really easier
 		set_reg32(dev->addr, IXGBE_SRRCTL(i), (get_reg32(dev->addr, IXGBE_SRRCTL(i)) & ~IXGBE_SRRCTL_DESCTYPE_MASK) | IXGBE_SRRCTL_DESCTYPE_ADV_ONEBUF);
@@ -151,7 +151,7 @@ static void init_rx(struct ixgbe_device* dev) {
 	set_flags32(dev->addr, IXGBE_CTRL_EXT, IXGBE_CTRL_EXT_NS_DIS);
 	// this flag probably refers to a broken feature: it's reserved and initialized as '1' but it must be set to '0'
 	// there isn't even a constant in ixgbe_types.h for this flag
-	for (uint16_t i = 0; i < dev->num_rx_queues; i++) {
+	for (uint16_t i = 0; i < dev->ixy.num_rx_queues; i++) {
 		clear_flags32(dev->addr, IXGBE_DCA_RXCTRL(i), 1 << 12);
 	}
 
@@ -175,7 +175,7 @@ static void init_tx(struct ixgbe_device* dev) {
 	clear_flags32(dev->addr, IXGBE_RTTDCS, IXGBE_RTTDCS_ARBDIS);
 
 	// per-queue config for all queues
-	for (uint16_t i = 0; i < dev->num_tx_queues; i++) {
+	for (uint16_t i = 0; i < dev->ixy.num_tx_queues; i++) {
 		debug("initializing tx queue %d", i);
 
 		// setup descriptor ring, see section 7.1.9
@@ -222,7 +222,7 @@ static void wait_for_link(const struct ixgbe_device* dev) {
 
 // see section 4.6.3
 static void reset_and_init(struct ixgbe_device* dev) {
-	info("Resetting device %s", dev->pci_addr);
+	info("Resetting device %s", dev->ixy.pci_addr);
 	// section 4.6.3.1 - disable all interrupts
 	set_reg32(dev->addr, IXGBE_EIMC, 0x7FFFFFFF);
 
@@ -234,7 +234,7 @@ static void reset_and_init(struct ixgbe_device* dev) {
 	// section 4.6.3.1 - disable interrupts again after reset
 	set_reg32(dev->addr, IXGBE_EIMC, 0x7FFFFFFF);
 
-	info("Initializing device %s", dev->pci_addr);
+	info("Initializing device %s", dev->ixy.pci_addr);
 
 	// section 4.6.3 - Wait for EEPROM auto read completion
 	wait_set_reg32(dev->addr, IXGBE_EEC, IXGBE_EEC_ARD);
@@ -256,10 +256,10 @@ static void reset_and_init(struct ixgbe_device* dev) {
 	init_tx(dev);
 
 	// enables queues after initializing everything
-	for (uint16_t i = 0; i < dev->num_rx_queues; i++) {
+	for (uint16_t i = 0; i < dev->ixy.num_rx_queues; i++) {
 		start_rx_queue(dev, i);
 	}
-	for (uint16_t i = 0; i < dev->num_tx_queues; i++) {
+	for (uint16_t i = 0; i < dev->ixy.num_tx_queues; i++) {
 		start_tx_queue(dev, i);
 	}
 
