@@ -4,7 +4,7 @@
 #include "stats.h"
 #include "log.h"
 #include "memory.h"
-#include "driver/ixgbe.h"
+#include "driver/device.h"
 
 // excluding CRC (offloaded by default)
 static const int PKT_SIZE = 60;
@@ -43,7 +43,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	struct mempool* mempool = init_mempool();
-	struct ixy_device* dev = ixgbe_init(argv[1], 1, 1);
+	struct ixy_device* dev = ixy_init(argv[1], 1, 1);
 
 	uint64_t last_stats_printed = monotonic_time();
 	uint64_t counter = 0;
@@ -60,14 +60,14 @@ int main(int argc, char* argv[]) {
 		// the old packets might still be used by the NIC: tx is async
 		pkt_buf_alloc_batch(mempool, bufs, BATCH_SIZE);
 		// the packets could be modified here to generate multiple flows
-		ixgbe_tx_batch_busy_wait(dev, 0, bufs, BATCH_SIZE);
+		ixy_tx_batch_busy_wait(dev, 0, bufs, BATCH_SIZE);
 
 		// don't check time for every packet, this yields +10% performance :)
 		if ((counter++ & 0xFFF) == 0) {
 			uint64_t time = monotonic_time();
 			if (time - last_stats_printed > 1000 * 1000 * 1000) {
 				// every second
-				ixgbe_read_stats(dev, &stats);
+				ixy_read_stats(dev, &stats);
 				print_stats_diff(&stats, &stats_old, time - last_stats_printed);
 				stats_old = stats;
 				last_stats_printed = time;

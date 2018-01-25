@@ -1,7 +1,6 @@
 #include "stats.h"
 
 #include <stdio.h>
-#include <driver/ixgbe.h>
 
 void print_stats(struct device_stats* stats) {
 	printf("[%s] RX: %zu bytes %zu packets\n", stats->device ? stats->device->pci_addr : "???", stats->rx_bytes, stats->rx_pkts);
@@ -48,6 +47,6 @@ void stats_init(struct device_stats* stats, struct ixy_device* dev) {
 	stats->tx_bytes = 0;
 	stats->device = dev;
 	if (dev) {
-		ixgbe_read_stats(dev, NULL);
+		ixy_read_stats(dev, NULL);
 	}
 }

@@ -4,15 +4,15 @@
 #include "stats.h"
 #include "log.h"
 #include "memory.h"
-#include "driver/ixgbe.h"
+#include "driver/device.h"
 
 const int BATCH_SIZE = 32;
 
 static void forward(struct ixy_device* rx_dev, uint16_t rx_queue, struct ixy_device* tx_dev, uint16_t tx_queue) {
 	struct pkt_buf* bufs[BATCH_SIZE];
-	uint32_t num_rx = ixgbe_rx_batch(rx_dev, rx_queue, bufs, BATCH_SIZE);
+	uint32_t num_rx = ixy_rx_batch(rx_dev, rx_queue, bufs, BATCH_SIZE);
 	if (num_rx > 0) {
-		uint32_t num_tx = ixgbe_tx_batch(tx_dev, tx_queue, bufs, num_rx);
+		uint32_t num_tx = ixy_tx_batch(tx_dev, tx_queue, bufs, num_rx);
 		// there are two ways to handle the case that packets are not being sent out:
 		// either wait on tx or drop them; in this case it's better to drop them, otherwise we accumulate latency
 		for (uint32_t i = num_tx; i < num_rx; i++) {
@@ -28,8 +28,8 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}
 
-	struct ixy_device* dev1 = ixgbe_init(argv[1], 1, 1);
-	struct ixy_device* dev2 = ixgbe_init(argv[2], 1, 1);
+	struct ixy_device* dev1 = ixy_init(argv[1], 1, 1);
+	struct ixy_device* dev2 = ixy_init(argv[2], 1, 1);
 
 	uint64_t last_stats_printed = monotonic_time();
 	struct device_stats stats1, stats1_old;
@@ -49,11 +49,11 @@ int main(int argc, char* argv[]) {
 			uint64_t time = monotonic_time();
 			if (time - last_stats_printed > 1000 * 1000 * 1000) {
 				// every second
-				ixgbe_read_stats(dev1, &stats1);
+				ixy_read_stats(dev1, &stats1);
 				print_stats_diff(&stats1, &stats1_old, time - last_stats_printed);
 				stats1_old = stats1;
 				if (dev1 != dev2) {
-					ixgbe_read_stats(dev2, &stats2);
+					ixy_read_stats(dev2, &stats2);
 					print_stats_diff(&stats2, &stats2_old, time - last_stats_printed);
 					stats2_old = stats2;
 				}
