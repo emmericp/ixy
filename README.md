@@ -13,13 +13,14 @@ Low-level functions like handling DMA descriptors are rarely more than a single 
 
 A whole ixy app, including the whole driver, is only ~1000 lines of C code.
 Check out the `ixy-fwd` and `ixy-pktgen` example apps and look through the code.
-The code often references sections in the [Intel 82599 datasheet](https://www.intel.com/content/dam/www/public/us/en/documents/datasheets/82599-10-gbe-controller-datasheet.pdf), so keep it open while reading the code.
+The code often references sections in the [Intel 82599 datasheet](https://www.intel.com/content/dam/www/public/us/en/documents/datasheets/82599-10-gbe-controller-datasheet.pdf) or the [VirtIO specification](http://docs.oasis-open.org/virtio/virtio/v1.0/virtio-v1.0.pdf), so keep them open while reading the code.
 You will be surprised how simple a full driver for a network card can be.
 
 
 
 # Features
 * Driver for Intel NICs in the `ixgbe` family, i.e., the 82599ES family (aka Intel X520)
+* Driver for paravirtualized virtio NICs
 * Less than 1000 lines of C code for a packet forwarder including the whole driver
 * No kernel modules needed
 * Simple API with memory management, similar to DPDK, easier to use than APIs based on a ring interface (e.g., netmap)
@@ -44,14 +45,14 @@ If you prefer to dive into the code: Start by reading the apps in [src/app](http
 **Your NIC has full DMA access to your memory. A misconfigured NIC will cause memory corruptions that might crash your server or even destroy your filesystem**. Do not run this on any systems that have anything remotely important on them if you want to modify the driver. Our version is also not necessarily safe and might be buggy. You have been warned.
 
 **Running ixy will unbind the driver of the given PCIe device without checking if it is in use.** This means the NIC will disappear from the system. Do not run this on NICs that you need.
-We currently don't check if the device is actually a supported NIC, trying to use another device will crash your system.
+We currently have a simple check if the device is actually a NIC, but trying to use another device could crash your system.
 
 1. Install the following dependencies
 	* gcc >= 4.8
 	* make
 	* cmake
 	
-	Run this Debian/Ubuntu to install them:
+	Run this on Debian/Ubuntu to install them:
 	
 	```
 	sudo apt-get install -y build-essential cmake
@@ -89,8 +90,8 @@ The list is in no particular order.
 
 ### Implement at least one other driver beside ixgbe
 
-To showcase how to make the framework more independent from the used hardware.
-Virtual NICs like VirtIO are a good candidate to build a simple VM-based environment.
+~~To showcase how to make the framework more independent from the used hardware.
+Virtual NICs like VirtIO are a good candidate to build a simple VM-based environment.~~
 
 NICs that rely too much on firmware (e.g., Intel XL710) are not fun, because you end up only talking to a firmware that does everything.
 The same is true for NICs like the ones by Mellanox that keep a lot of magic in kernel modules, even when being used by frameworks like DPDK.
