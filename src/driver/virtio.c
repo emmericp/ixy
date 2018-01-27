@@ -309,6 +309,9 @@ static void virtio_legacy_init(struct virtio_device* dev) {
 
 // read stat counters and accumulate in stats
 // stats may be NULL to just reset the counters
+// this is not thread-safe, (but we only support one queue anyways)
+// a proper thread-safe implementation would collect per-queue stats
+// and perform a read with relaxed memory ordering here without resetting the stats
 void virtio_read_stats(struct ixy_device* ixy, struct device_stats* stats) {
 	struct virtio_device* dev = IXY_TO_VIRTIO(ixy);
 	if (stats) {
@@ -463,7 +466,7 @@ uint32_t virtio_tx_batch(struct ixy_device* ixy, uint16_t queue_id, struct pkt_b
 
 		vq->virtual_addresses[idx] = buf;
 
-		// Copy header to headroom infront of data buffer
+		// Copy header to headroom in front of data buffer
 		memcpy(buf->head_room + sizeof(buf->head_room) - sizeof(net_hdr), &net_hdr, sizeof(net_hdr));
 
 		vq->vring.desc[idx].len = buf->size + sizeof(net_hdr);
@@ -479,3 +482,4 @@ uint32_t virtio_tx_batch(struct ixy_device* ixy, uint16_t queue_id, struct pkt_b
 	virtio_legacy_notify_queue(dev, 1);
 	return buf_idx;
 }
+
