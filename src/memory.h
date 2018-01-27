@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <unistd.h>
+#include <stddef.h>
+#include <assert.h>
 
 #define HUGE_PAGE_BITS 21
 #define HUGE_PAGE_SIZE (1 << HUGE_PAGE_BITS)
@@ -14,8 +16,14 @@ struct pkt_buf {
 	struct mempool* mempool;
 	uint32_t mempool_idx;
 	uint32_t size;
+	uint8_t head_room[40];
 	uint8_t data[] __attribute__((aligned(64)));
 };
+
+static_assert(sizeof(struct pkt_buf) == 64, "pkt_buf too large");
+static_assert(offsetof(struct pkt_buf, data) == 64, "data at unexpected position");
+static_assert(offsetof(struct pkt_buf, data) - offsetof(struct pkt_buf, head_room) == 40, "head_room at unexpected position");
+static_assert(((struct pkt_buf*)(0))->head_room + 40 == ((struct pkt_buf*)(0))->data, "head_room at unexpected position");
 
 // everything here contains virtual addresses, the mapping to physical addresses are in the pkt_buf
 struct mempool {

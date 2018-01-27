@@ -24,7 +24,7 @@ static struct mempool* init_mempool() {
 		buf->size = PKT_SIZE;
 		// TODO: initialize packet with something else here
 		for (int i = 0; i < PKT_SIZE; i++) {
-			buf->data[i] = 0xFF;
+			buf->data[i] = (uint8_t) (i % 256);
 		}
 		bufs[buf_id] = buf;
 	}
