@@ -50,7 +50,7 @@ static bool is_phys_continuous(void* virt, size_t size) {
 
 static uint32_t huge_pg_id;
 
-static struct dma_memory memory_brute_force_allocate(size_t size, size_t page_size) {
+static struct dma_memory memory_brute_force_allocate(size_t size) {
 	const size_t num_pages = 32;
 	struct entry {
 		void* virt;
@@ -62,13 +62,14 @@ static struct dma_memory memory_brute_force_allocate(size_t size, size_t page_si
 	if (size % HUGE_PAGE_SIZE) {
 		size = ((size >> HUGE_PAGE_BITS) + 1) << HUGE_PAGE_BITS;
 	}
+	long page_size = sysconf(_SC_PAGESIZE);
+	// long page_size = HUGE_PAGE_SIZE;
 	// Allocate target area to map our pages into. This is to prevent collisions in the virtual address space during remapping
-	uint32_t id = __sync_fetch_and_add(&huge_pg_id, 1);
 	char path[PATH_MAX];
-	snprintf(path, PATH_MAX, "/mnt/huge/ixy-%d-%d", getpid(), id);
-	int fd = check_err(open(path, O_CREAT | O_RDWR, S_IRWXU), "open hugetlbfs file, check that /mnt/huge is mounted");
+	snprintf(path, PATH_MAX, "ixy-XXXXXX");
+	int fd = check_err(mkstemp(path), "open hugetlbfs file, check that /mnt/huge is mounted");
 	check_err(ftruncate(fd, (off_t) num_pages * page_size), "allocate huge page memory, check hugetlbfs configuration");
-	void* target = (void*) check_err(mmap(NULL, num_pages * page_size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_HUGETLB, fd, 0), "mmap hugepage");
+	void* target = (void*) check_err(mmap(NULL, num_pages * page_size, PROT_READ | PROT_WRITE, MAP_SHARED /*| MAP_HUGETLB*/, fd, 0), "mmap hugepage");
 	check_err(mlock(target, num_pages * page_size), "disable swap for DMA memory");
 	close(fd);
 	unlink(path);
@@ -76,22 +77,20 @@ static struct dma_memory memory_brute_force_allocate(size_t size, size_t page_si
 	((volatile uint8_t*) target)[0] = temp;
 	debug("Target area %p - %p", target, target + size);
 
-	// Allocate sample pages
-	for (size_t i = 0; i < num_pages; ++i) {
-		uint32_t id = __sync_fetch_and_add(&huge_pg_id, 1);
-		char path[PATH_MAX];
-		snprintf(path, PATH_MAX, "/mnt/huge/ixy-%d-%d", getpid(), id);
-		int fd = check_err(open(path, O_CREAT | O_RDWR, S_IRWXU), "open hugetlbfs file, check that /mnt/huge is mounted");
-		check_err(ftruncate(fd, (off_t) page_size), "allocate huge page memory, check hugetlbfs configuration");
-		void* virt_addr = (void*) check_err(mmap(NULL, page_size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_HUGETLB, fd, 0), "mmap hugepage");
-		check_err(mlock(virt_addr, page_size), "disable swap for DMA memory");
-		unlink(path);
-		volatile uint8_t temp = ((volatile uint8_t*) virt_addr)[0];
-		((volatile uint8_t*) virt_addr)[0] = temp;
 
+	// Allocate sample pages
+	snprintf(path, PATH_MAX, "ixy-XXXXXX");
+	fd = check_err(mkstemp(path), "open hugetlbfs file, check that /mnt/huge is mounted");
+	check_err(ftruncate(fd, (off_t) num_pages * page_size), "allocate huge page memory, check hugetlbfs configuration");
+	void* virt_addr = (void*) check_err(mmap(NULL, num_pages * page_size, PROT_READ | PROT_WRITE, MAP_SHARED /*| MAP_HUGETLB*/, fd, 0), "mmap hugepage");
+	check_err(mlock(virt_addr, page_size), "disable swap for DMA memory");
+	unlink(path);
+	for (size_t i = 0; i < num_pages; ++i) {	
+		temp = ((volatile uint8_t*) virt_addr + i * page_size)[0];
+		((volatile uint8_t*) virt_addr + i * page_size)[0] = temp;
 		pages[i].fd = fd;
-		pages[i].virt = virt_addr;
-		pages[i].phy = virt_to_phys(virt_addr);
+		pages[i].virt = virt_addr + i * page_size;
+		pages[i].phy = virt_to_phys(virt_addr + i * page_size);
 	}
 	// Sort by physical address
 	for (size_t i = 0; i < num_pages; ++i) {
@@ -108,7 +107,7 @@ static struct dma_memory memory_brute_force_allocate(size_t size, size_t page_si
 	}
 	// Map pages to target area
 	for (size_t i = 0; i < num_pages; ++i) {
-		pages[i].virt = (void*) check_err(mmap(target + i * page_size, page_size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_HUGETLB | MAP_FIXED | MAP_LOCKED, pages[i].fd, 0), "remap page");
+		pages[i].virt = (void*) check_err(mmap(target + i * page_size, page_size, PROT_READ | PROT_WRITE, MAP_SHARED /*| MAP_HUGETLB*/ | MAP_FIXED | MAP_LOCKED, pages[i].fd, 0), "remap page");
 		close(pages[i].fd);
 	}
 	for (size_t i = 0; i < num_pages; ++i) {
@@ -141,7 +140,7 @@ struct dma_memory memory_allocate_dma(size_t size, bool require_contiguous) {
 		size = ((size >> HUGE_PAGE_BITS) + 1) << HUGE_PAGE_BITS;
 	}
 	if (require_contiguous && size > HUGE_PAGE_SIZE) {
-		return memory_brute_force_allocate(size, HUGE_PAGE_SIZE);
+		return memory_brute_force_allocate(size);
 		// this is the place to implement larger contiguous physical mappings if that's ever needed
 		error("could not map physically contiguous memory");
 	}
