@@ -26,34 +26,26 @@ static uintptr_t virt_to_phys(void* virt) {
 	return (phy & 0x7fffffffffffffULL) * pagesize + ((uintptr_t) virt) % pagesize;
 }
 
-static bool is_phys_continuous(void* virt, size_t size) {
-    long pagesize = sysconf(_SC_PAGESIZE);
+static bool is_continuous(void* virt, size_t size) {
+    long page_size = sysconf(_SC_PAGESIZE);
     uintptr_t virt_base = (uintptr_t) virt;
-    if (virt_base % (unsigned long) pagesize)
+    if (virt_base % (unsigned long) page_size)
         error("memory block does not start at page boundary");
     uintptr_t phys_base = virt_to_phys(virt);
-    for (uintptr_t i = virt_base; i < virt_base + size; i+=pagesize) {
+    for (uintptr_t i = virt_base; i < virt_base + size; i += page_size) {
         uintptr_t phys = virt_to_phys((void*) i);
         intptr_t virt_diff = i - virt_base;
-        // intptr_t phys_diff = phys - phys_base;
-        if (phys_base + virt_diff != phys) {
-            // debug("memory block not physically continuous:\n"
-            //               "\tvirt base %p phys %p\n"
-            //               "\tvirt end  %p size 0x%zx\n"
-            //               "\tvirt diff %"PRIiPTR " phys diff %"PRIiPTR"\n"
-            //               "\tvirt page %p phys %p",
-            //       (void*) virt_base, (void*) phys_base, (void*) virt_base + size, size, virt_diff, phys_diff, (void*) i, (void*) phys);
+        intptr_t phys_diff = phys - phys_base;
+        if (phys_diff != virt_diff) {
             return false;
         }
     }
     return true;
 }
 
-static uint32_t huge_pg_id;
-
 static struct dma_memory memory_brute_force_allocate(size_t size) {
 	long page_size = sysconf(_SC_PAGESIZE);
-	const size_t num_pages = 1024;// * 4;
+	const size_t num_pages = 1024;
 	const size_t pool_size = num_pages * page_size;
 	struct entry {
 		void* virt;
@@ -72,12 +64,7 @@ static struct dma_memory memory_brute_force_allocate(size_t size) {
 	debug("Target area %p - %p", target, target + pool_size);
 
 	// Allocate pooling pages
-	// TODO: I'm not sure if a temp file is even needed or if the pool could not be sourced from anon pages too
-	char path[PATH_MAX];
-	snprintf(path, PATH_MAX, "ixy-XXXXXX");
-	int fd = check_err(mkstemp(path), "create temporary file");
-	check_err(ftruncate(fd, (off_t) pool_size), "resize temp file");
-	void* pool = (void*) check_err(mmap(NULL, pool_size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_NORESERVE, fd, 0), "mmap pool");
+	void* pool = (void*) check_err(mmap(NULL, pool_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0), "mmap pool");
 	check_err(mlock(pool, pool_size), "disable swap for DMA memory");
 	for (size_t i = 0; i < num_pages; ++i) {
 		volatile uint8_t temp = ((volatile uint8_t*) pool + i * page_size)[0];
@@ -85,8 +72,6 @@ static struct dma_memory memory_brute_force_allocate(size_t size) {
 		pages[i].virt = pool + i * page_size;
 		pages[i].phy = virt_to_phys(pool + i * page_size);
 	}
-	unlink(path);
-	close(fd);
 	// Sort by physical address
 	for (size_t i = 0; i < num_pages; ++i) {
 		for (size_t j = num_pages - 1; j > i; --j) {
@@ -103,8 +88,8 @@ static struct dma_memory memory_brute_force_allocate(size_t size) {
 		pages[i].phy = virt_to_phys(pages[i].virt);
 	}
 	// Find contiguous block
-	for (size_t i = 0; i < num_pages; ++i) {
-		if (is_phys_continuous(target + i * page_size, size)) {
+	for (size_t i = 0; i < num_pages - size / page_size; ++i) {
+		if (is_continuous(target + i * page_size, size)) {
 			debug("success: %p -> 0x%lx", pages[i].virt, pages[i].phy);
 			return (struct dma_memory) {
 				.virt = pages[i].virt,
@@ -121,6 +106,8 @@ static struct dma_memory memory_brute_force_allocate(size_t size) {
 	}
 	error("Could not find suitable block");
 }
+
+static uint32_t huge_pg_id;
 
 // allocate memory suitable for DMA access in huge pages
 // this requires hugetlbfs to be mounted at /mnt/huge
@@ -207,4 +194,3 @@ void pkt_buf_free(struct pkt_buf* buf) {
 	struct mempool* mempool = buf->mempool;
 	mempool->free_stack[mempool->free_stack_top++] = buf->mempool_idx;
 }
-
