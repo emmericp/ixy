@@ -1,4 +1,3 @@
-#define _GNU_SOURCE
 #include "memory.h"
 #include "log.h"
 
