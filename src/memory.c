@@ -112,10 +112,7 @@ static uint32_t huge_pg_id;
 // this requires hugetlbfs to be mounted at /mnt/huge
 // not using anonymous hugepages because hugetlbfs can give us multiple pages with contiguous virtual addresses
 // allocating anonymous pages would require manual remapping which is more annoying than handling files
-struct dma_memory memory_allocate_dma(size_t size, bool require_contiguous) {
-	if (require_contiguous) {
-		return memory_brute_force_allocate(size);
-	}
+static struct dma_memory memory_hugepage_allocate(size_t size) {
 	// round up to multiples of 2 MB if necessary, this is the wasteful part
 	// this could be fixed by co-locating allocations on the same page until a request would be too large
 	// when fixing this: make sure to align on 128 byte boundaries (82599 dma requirement)
@@ -141,6 +138,16 @@ struct dma_memory memory_allocate_dma(size_t size, bool require_contiguous) {
 	};
 }
 
+struct dma_memory memory_allocate_dma(size_t size, enum memory_dma_allocate_flags flags) {
+	if (!(flags & USE_HUGEPAGES)) {
+		return memory_brute_force_allocate(size);
+	}
+	if (flags & USE_HUGEPAGES && !(flags & REQUIRE_CONTIGUOUS && size > HUGE_PAGE_SIZE)) {
+		return memory_hugepage_allocate(size);
+	}
+	error("Unsupported combination of flags %x", flags);
+}
+
 // allocate a memory pool from which DMA'able packet buffers can be allocated
 // this is currently not yet thread-safe, i.e., a pool can only be used by one thread,
 // this means a packet can only be sent/received by a single thread
@@ -153,7 +160,7 @@ struct mempool* memory_allocate_mempool(uint32_t num_entries, uint32_t entry_siz
 		error("entry size must be a divisor of the huge page size (%d)", HUGE_PAGE_SIZE);
 	}
 	struct mempool* mempool = (struct mempool*) malloc(sizeof(struct mempool) + num_entries * sizeof(uint32_t));
-	struct dma_memory mem = memory_allocate_dma(num_entries * entry_size, false);
+	struct dma_memory mem = memory_allocate_dma(num_entries * entry_size, USE_HUGEPAGES);
 	mempool->num_entries = num_entries;
 	mempool->buf_size = entry_size;
 	mempool->base_addr = mem.virt;

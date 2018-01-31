@@ -129,7 +129,7 @@ static void init_rx(struct ixgbe_device* dev) {
 		set_flags32(dev->addr, IXGBE_SRRCTL(i), IXGBE_SRRCTL_DROP_EN);
 		// setup descriptor ring, see section 7.1.9
 		uint32_t ring_size_bytes = NUM_RX_QUEUE_ENTRIES * sizeof(union ixgbe_adv_rx_desc);
-		struct dma_memory mem = memory_allocate_dma(ring_size_bytes, true);
+		struct dma_memory mem = memory_allocate_dma(ring_size_bytes, REQUIRE_CONTIGUOUS);
 		// neat trick from Snabb: initialize to 0xFF to prevent rogue memory accesses on premature DMA activation
 		memset(mem.virt, -1, ring_size_bytes);
 		set_reg32(dev->addr, IXGBE_RDBAL(i), (uint32_t) (mem.phy & 0xFFFFFFFFull));
@@ -180,7 +180,7 @@ static void init_tx(struct ixgbe_device* dev) {
 
 		// setup descriptor ring, see section 7.1.9
 		uint32_t ring_size_bytes = NUM_TX_QUEUE_ENTRIES * sizeof(union ixgbe_adv_tx_desc);
-		struct dma_memory mem = memory_allocate_dma(ring_size_bytes, true);
+		struct dma_memory mem = memory_allocate_dma(ring_size_bytes, REQUIRE_CONTIGUOUS);
 		memset(mem.virt, -1, ring_size_bytes);
 		set_reg32(dev->addr, IXGBE_TDBAL(i), (uint32_t) (mem.phy & 0xFFFFFFFFull));
 		set_reg32(dev->addr, IXGBE_TDBAH(i), (uint32_t) (mem.phy >> 32));
