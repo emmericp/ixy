@@ -12,6 +12,10 @@ static void forward(struct ixy_device* rx_dev, uint16_t rx_queue, struct ixy_dev
 	struct pkt_buf* bufs[BATCH_SIZE];
 	uint32_t num_rx = ixy_rx_batch(rx_dev, rx_queue, bufs, BATCH_SIZE);
 	if (num_rx > 0) {
+		// touch all packets, otherwise it's a completely unrealistic workload if the packet just stays in L3
+		for (uint32_t i = 0; i < num_rx; i++) {
+			bufs[i]->data[1]++;
+		}
 		uint32_t num_tx = ixy_tx_batch(tx_dev, tx_queue, bufs, num_rx);
 		// there are two ways to handle the case that packets are not being sent out:
 		// either wait on tx or drop them; in this case it's better to drop them, otherwise we accumulate latency
