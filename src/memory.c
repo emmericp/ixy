@@ -54,7 +54,7 @@ static struct dma_memory memory_brute_force_allocate(size_t size) {
 
 	// Round up to next full page
 	if (size % page_size) {
-		size = (size - 1 + page_size) & ~page_size;
+		size = (size - 1 + page_size) & ~(page_size - 1);
 	}
 	debug("Requested %zu bytes, %zu pages", size, size / page_size);
 
