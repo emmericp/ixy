@@ -285,7 +285,7 @@ static void virtio_legacy_init(struct virtio_device* dev) {
 		error("In legacy mode but device is not legacy");
 	}
 	const uint32_t required_features = (1u << VIRTIO_NET_F_CSUM) | (1u << VIRTIO_NET_F_GUEST_CSUM) |
-					   (1u << VIRTIO_NET_F_CTRL_VQ) | (1u << VIRTIO_F_ANY_LAYOUT) |
+					   (1u << VIRTIO_NET_F_CTRL_VQ) /*| (1u << VIRTIO_F_ANY_LAYOUT)*/ |
 					   (1u << VIRTIO_NET_F_CTRL_RX) /*| (1u<<VIRTIO_NET_F_MQ)*/;
 	if ((host_features & required_features) != required_features) {
 		error("Device does not support required features");
@@ -432,13 +432,14 @@ uint32_t virtio_tx_batch(struct ixy_device* ixy, uint16_t queue_id, struct pkt_b
 	_mm_mfence();
 	// Free sent buffers
 	while (vq->vq_used_last_idx != vq->vring.used->idx) {
-		// info("We can free some buffers: %u != %u", vq->vq_used_last_idx,
-		// vq->vring.used->idx);
+		// info("We can free some buffers: %u != %u", vq->vq_used_last_idx, vq->vring.used->idx);
 		struct vring_used_elem* e = vq->vring.used->ring + (vq->vq_used_last_idx % vq->vring.num);
 		// info("e %p, id %u", e, e->id);
 		struct vring_desc* desc = &vq->vring.desc[e->id];
-		desc->addr = 0;
-		desc->len = 0;
+		if (desc->next) {
+			vq->vring.desc[desc->next] = (struct vring_desc) {};
+		}
+		*desc = (struct vring_desc) {};
 		pkt_buf_free(vq->virtual_addresses[e->id]);
 		vq->vq_used_last_idx++;
 		_mm_mfence();
@@ -448,17 +449,16 @@ uint32_t virtio_tx_batch(struct ixy_device* ixy, uint16_t queue_id, struct pkt_b
 	uint16_t idx = 0; // Keep index of last found free descriptor and start searching from there
 	for (buf_idx = 0; buf_idx < num_bufs; ++buf_idx) {
 		struct pkt_buf* buf = bufs[buf_idx];
-		// Find free desc index
-		for (; idx < vq->vring.num; ++idx) {
-			struct vring_desc* desc = &vq->vring.desc[idx];
-			if (desc->addr == 0) {
+		// Find two free desc indices
+		for (; idx < vq->vring.num - 1; ++idx) {
+			if (vq->vring.desc[idx].addr == 0 && vq->vring.desc[idx + 1].addr == 0) {
 				break;
 			}
 		}
-		if (idx == vq->vring.num) {
+		if (idx == vq->vring.num - 1) {
 			break;
 		}
-		// info("Found free desc slot at %u (%u)", idx, vq->vring.num);
+		// info("Found two free desc slots at %u (%u)", idx, vq->vring.num);
 
 		// Update tx counter
 		dev->tx_bytes += buf->size;
@@ -469,11 +469,15 @@ uint32_t virtio_tx_batch(struct ixy_device* ixy, uint16_t queue_id, struct pkt_b
 		// Copy header to headroom in front of data buffer
 		memcpy(buf->head_room + sizeof(buf->head_room) - sizeof(net_hdr), &net_hdr, sizeof(net_hdr));
 
-		vq->vring.desc[idx].len = buf->size + sizeof(net_hdr);
-		vq->vring.desc[idx].addr =
-		    buf->buf_addr_phy + offsetof(struct pkt_buf, head_room) + sizeof(buf->head_room) - sizeof(net_hdr);
-		vq->vring.desc[idx].flags = 0;
-		vq->vring.desc[idx].next = 0;
+		// Fill in descriptors, first is header, second is payload
+		vq->vring.desc[idx].len = sizeof(net_hdr);
+		vq->vring.desc[idx + 1].len = buf->size;
+		vq->vring.desc[idx].addr = buf->buf_addr_phy + offsetof(struct pkt_buf, head_room) + sizeof(buf->head_room) - sizeof(net_hdr);
+		vq->vring.desc[idx + 1].addr = buf->buf_addr_phy + offsetof(struct pkt_buf, data);
+		vq->vring.desc[idx].flags = VRING_DESC_F_NEXT;
+		vq->vring.desc[idx + 1].flags = 0;
+		vq->vring.desc[idx].next = idx + 1;
+		vq->vring.desc[idx + 1].next = 0;
 		vq->vring.avail->ring[idx] = idx;
 	}
 	_mm_mfence();
