@@ -10,8 +10,11 @@
 #include "pci.h"
 #include "log.h"
 
-
 void remove_driver(const char* pci_addr) {
+#ifdef USE_VFIO
+	// don't remove VFIO driver
+	return;
+#endif
 	char path[PATH_MAX];
 	snprintf(path, PATH_MAX, "/sys/bus/pci/devices/%s/driver/unbind", pci_addr);
 	int fd = open(path, O_WRONLY);

@@ -10,6 +10,10 @@
 #include "driver/device.h"
 #include "ixgbe_type.h"
 
+#ifdef USE_VFIO
+#include "vfio.h"
+#endif
+
 const char* driver_name = "ixy-ixgbe";
 
 const int MAX_RX_QUEUE_ENTRIES = 4096;
@@ -63,7 +67,7 @@ static void start_rx_queue(struct ixgbe_device* dev, int queue_id) {
 	// this has to be fixed if jumbo frames are to be supported
 	// mempool should be >= the number of rx and tx descriptors for a forwarding application
 	uint32_t mempool_size = NUM_RX_QUEUE_ENTRIES + NUM_TX_QUEUE_ENTRIES;
-	queue->mempool = memory_allocate_mempool(mempool_size < 4096 ? 4096 : mempool_size, 2048);
+	queue->mempool = memory_allocate_mempool(&dev->ixy, mempool_size < 4096 ? 4096 : mempool_size, 2048);
 	if (queue->num_entries & (queue->num_entries - 1)) {
 		error("number of queue entries must be a power of 2");
 	}
@@ -130,7 +134,7 @@ static void init_rx(struct ixgbe_device* dev) {
 		set_flags32(dev->addr, IXGBE_SRRCTL(i), IXGBE_SRRCTL_DROP_EN);
 		// setup descriptor ring, see section 7.1.9
 		uint32_t ring_size_bytes = NUM_RX_QUEUE_ENTRIES * sizeof(union ixgbe_adv_rx_desc);
-		struct dma_memory mem = memory_allocate_dma(ring_size_bytes, true);
+		struct dma_memory mem = memory_allocate_dma(&dev->ixy, ring_size_bytes, true);
 		// neat trick from Snabb: initialize to 0xFF to prevent rogue memory accesses on premature DMA activation
 		memset(mem.virt, -1, ring_size_bytes);
 		set_reg32(dev->addr, IXGBE_RDBAL(i), (uint32_t) (mem.phy & 0xFFFFFFFFull));
@@ -181,7 +185,7 @@ static void init_tx(struct ixgbe_device* dev) {
 
 		// setup descriptor ring, see section 7.1.9
 		uint32_t ring_size_bytes = NUM_TX_QUEUE_ENTRIES * sizeof(union ixgbe_adv_tx_desc);
-		struct dma_memory mem = memory_allocate_dma(ring_size_bytes, true);
+		struct dma_memory mem = memory_allocate_dma(&dev->ixy, ring_size_bytes, true);
 		memset(mem.virt, -1, ring_size_bytes);
 		set_reg32(dev->addr, IXGBE_TDBAL(i), (uint32_t) (mem.phy & 0xFFFFFFFFull));
 		set_reg32(dev->addr, IXGBE_TDBAH(i), (uint32_t) (mem.phy >> 32));
@@ -284,6 +288,9 @@ struct ixy_device* ixgbe_init(const char* pci_addr, uint16_t rx_queues, uint16_t
 	}
 	struct ixgbe_device* dev = (struct ixgbe_device*) malloc(sizeof(struct ixgbe_device));
 	dev->ixy.pci_addr = strdup(pci_addr);
+#ifdef USE_VFIO
+	check_err(vfio_init(&dev->ixy), "failed to init vfio");
+#endif
 	dev->ixy.driver_name = driver_name;
 	dev->ixy.num_rx_queues = rx_queues;
 	dev->ixy.num_tx_queues = tx_queues;

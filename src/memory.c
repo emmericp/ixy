@@ -1,5 +1,6 @@
 #include "memory.h"
 #include "log.h"
+#include "driver/device.h"
 
 #include <stddef.h>
 #include <linux/limits.h>
@@ -7,6 +8,12 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#include <sys/ioctl.h>
+
+#ifdef USE_VFIO
+#include "vfio.h"
+#include <linux/vfio.h>
+#endif
 
 // translate a virtual address to a physical one via /proc/self/pagemap
 static uintptr_t virt_to_phys(void* virt) {
@@ -30,7 +37,7 @@ static uint32_t huge_pg_id;
 // this requires hugetlbfs to be mounted at /mnt/huge
 // not using anonymous hugepages because hugetlbfs can give us multiple pages with contiguous virtual addresses
 // allocating anonymous pages would require manual remapping which is more annoying than handling files
-struct dma_memory memory_allocate_dma(size_t size, bool require_contiguous) {
+struct dma_memory memory_allocate_dma(struct ixy_device* dev, size_t size, bool require_contiguous) {
 	// round up to multiples of 2 MB if necessary, this is the wasteful part
 	// this could be fixed by co-locating allocations on the same page until a request would be too large
 	// when fixing this: make sure to align on 128 byte boundaries (82599 dma requirement)
@@ -54,6 +61,15 @@ struct dma_memory memory_allocate_dma(size_t size, bool require_contiguous) {
 	// don't keep it around in the hugetlbfs
 	close(fd);
 	unlink(path);
+#ifdef USE_VFIO
+	// create IOMMU mapping
+	for(uint32_t i = 0; i < size / HUGE_PAGE_SIZE; i++){
+		void* addr = virt_addr + HUGE_PAGE_SIZE*i;
+		uint64_t vaddr = (uint64_t)addr;
+		uint64_t iova = (uint64_t)virt_to_phys(addr);
+		check_err(vfio_map_dma(dev, vaddr, iova, HUGE_PAGE_SIZE), "faile to create IOMMU mapping");
+	}
+#endif
 	return (struct dma_memory) {
 		.virt = virt_addr,
 		.phy = virt_to_phys(virt_addr)
@@ -64,7 +80,7 @@ struct dma_memory memory_allocate_dma(size_t size, bool require_contiguous) {
 // this is currently not yet thread-safe, i.e., a pool can only be used by one thread,
 // this means a packet can only be sent/received by a single thread
 // entry_size can be 0 to use the default
-struct mempool* memory_allocate_mempool(uint32_t num_entries, uint32_t entry_size) {
+struct mempool* memory_allocate_mempool(struct ixy_device* dev, uint32_t num_entries, uint32_t entry_size) {
 	entry_size = entry_size ? entry_size : 2048;
 	// require entries that neatly fit into the page size, this makes the memory pool much easier
 	// otherwise our base_addr + index * size formula would be wrong because we can't cross a page-boundary
@@ -72,7 +88,7 @@ struct mempool* memory_allocate_mempool(uint32_t num_entries, uint32_t entry_siz
 		error("entry size must be a divisor of the huge page size (%d)", HUGE_PAGE_SIZE);
 	}
 	struct mempool* mempool = (struct mempool*) malloc(sizeof(struct mempool) + num_entries * sizeof(uint32_t));
-	struct dma_memory mem = memory_allocate_dma(num_entries * entry_size, false);
+	struct dma_memory mem = memory_allocate_dma(dev, num_entries * entry_size, false);
 	mempool->num_entries = num_entries;
 	mempool->buf_size = entry_size;
 	mempool->base_addr = mem.virt;

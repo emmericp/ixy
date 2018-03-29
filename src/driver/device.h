@@ -40,6 +40,11 @@ struct ixy_device {
 	void (*read_stats) (struct ixy_device* dev, struct device_stats* stats);
 	void (*set_promisc) (struct ixy_device* dev, bool enabled);
 	uint32_t (*get_link_speed) (const struct ixy_device* dev);
+#ifdef USE_VFIO
+	int vfio_fd;  // device fd
+	int vfio_gfd; // group fd
+	int vfio_cfd; // container fd
+#endif
 };
 
 struct ixy_device* ixy_init(const char* pci_addr, uint16_t rx_queues, uint16_t tx_queues);
