@@ -33,7 +33,7 @@ You will be surprised how simple a full driver for a network card can be.
 Tested on an Intel 82599ES (aka Intel X520), X540, and X550. Might not work on all variants of these NICs because our link setup code is a little bit dodgy.
 
 # How does it work?
-Check out the [draft of our paper](https://www.net.in.tum.de/fileadmin/bibtex/publications/papers/ixy_paper_short_draft1.pdf).
+Check out the [draft of our paper](https://www.net.in.tum.de/fileadmin/bibtex/publications/papers/ixy_paper_draft2.pdf).
 
 If you prefer to dive into the code: Start by reading the apps in [src/app](https://github.com/emmericp/ixy/tree/master/src/app) then follow the function calls into the driver. The comments in the code refer to the [Intel 82599 datasheet](https://www.intel.com/content/dam/www/public/us/en/documents/datasheets/82599-10-gbe-controller-datasheet.pdf) (Revision 3.3, March 2016).
 
@@ -88,19 +88,20 @@ We currently have a simple check if the device is actually a NIC, but trying to 
 It's not the plan to implement every single feature, but a few more things would be nice to have.
 The list is in no particular order.
 
-### Implement at least one other driver beside ixgbe
-
-~~To showcase how to make the framework more independent from the used hardware.
-Virtual NICs like VirtIO are a good candidate to build a simple VM-based environment.~~
+### Implement at least one other driver beside ixgbe and VirtIO
 
 NICs that rely too much on firmware (e.g., Intel XL710) are not fun, because you end up only talking to a firmware that does everything.
 The same is true for NICs like the ones by Mellanox that keep a lot of magic in kernel modules, even when being used by frameworks like DPDK.
 
-### NUMA support
+Interesting candidates would be NICs from the Intel igb and e1000e families as they quite common and reasonably cheap.
+
+### Better NUMA support
 PCIe devices are attached to a specific CPU in NUMA systems.
 DMA memory should be pinned to the correct NUMA node.
 Threads handling packet reception should also be pinned to the same NUMA node.
 
+NUMA handling must currently be done via `numactl` outside of ixy. 
+Implementing it within ixy is annoying without depending on `libnuma`, so it's not implemented here.
 
 ### RSS support
 What's the point of having multiple rx queues if there is no good way to distribute the traffic to them?
