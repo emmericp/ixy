@@ -95,6 +95,10 @@ The same is true for NICs like the ones by Mellanox that keep a lot of magic in 
 
 Interesting candidates would be NICs from the Intel igb and e1000e families as they quite common and reasonably cheap.
 
+### IOMMU support
+Adding support for the IOMMU via the Linux `vfio` driver would allow us to build a safe userspace driver that can drop all privileges after startup.
+Some work towards this can be [found on a branch here](https://github.com/mmisono/ixy/tree/vfio).
+
 ### Better NUMA support
 PCIe devices are attached to a specific CPU in NUMA systems.
 DMA memory should be pinned to the correct NUMA node.
