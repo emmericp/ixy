@@ -6,10 +6,10 @@
 #include "memory.h"
 
 struct ixgbe_device {
-    struct ixy_device ixy;
-    uint8_t* addr;
-    void* rx_queues;
-    void* tx_queues;
+	struct ixy_device ixy;
+	uint8_t* addr;
+	void* rx_queues;
+	void* tx_queues;
 };
 
 #define IXY_TO_IXGBE(ixy_device) container_of(ixy_device, struct ixgbe_device, ixy)

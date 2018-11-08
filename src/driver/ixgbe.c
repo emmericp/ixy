@@ -1,6 +1,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <linux/limits.h>
+#include <linux/vfio.h>
+#include <sys/stat.h>
 
 #include "log.h"
 #include "ixgbe.h"
@@ -10,9 +13,7 @@
 #include "driver/device.h"
 #include "ixgbe_type.h"
 
-#ifdef USE_VFIO
-#include "vfio.h"
-#endif
+#include "libixy-vfio.h"
 
 const char* driver_name = "ixy-ixgbe";
 
@@ -21,6 +22,9 @@ const int MAX_TX_QUEUE_ENTRIES = 4096;
 
 const int NUM_RX_QUEUE_ENTRIES = 512;
 const int NUM_TX_QUEUE_ENTRIES = 512;
+
+const int PKT_BUF_ENTRY_SIZE = 2048;
+const int MIN_MEMPOOL_ENTRIES = 4096;
 
 const int TX_CLEAN_BATCH = 32;
 
@@ -66,8 +70,8 @@ static void start_rx_queue(struct ixgbe_device* dev, int queue_id) {
 	// is the default MTU of 1518
 	// this has to be fixed if jumbo frames are to be supported
 	// mempool should be >= the number of rx and tx descriptors for a forwarding application
-	uint32_t mempool_size = NUM_RX_QUEUE_ENTRIES + NUM_TX_QUEUE_ENTRIES;
-	queue->mempool = memory_allocate_mempool(&dev->ixy, mempool_size < 4096 ? 4096 : mempool_size, 2048);
+	int mempool_size = NUM_RX_QUEUE_ENTRIES + NUM_TX_QUEUE_ENTRIES;
+	queue->mempool = memory_allocate_mempool(mempool_size < MIN_MEMPOOL_ENTRIES ? MIN_MEMPOOL_ENTRIES : mempool_size, PKT_BUF_ENTRY_SIZE);
 	if (queue->num_entries & (queue->num_entries - 1)) {
 		error("number of queue entries must be a power of 2");
 	}
@@ -134,9 +138,10 @@ static void init_rx(struct ixgbe_device* dev) {
 		set_flags32(dev->addr, IXGBE_SRRCTL(i), IXGBE_SRRCTL_DROP_EN);
 		// setup descriptor ring, see section 7.1.9
 		uint32_t ring_size_bytes = NUM_RX_QUEUE_ENTRIES * sizeof(union ixgbe_adv_rx_desc);
-		struct dma_memory mem = memory_allocate_dma(&dev->ixy, ring_size_bytes, true);
+		struct dma_memory mem = memory_allocate_dma(ring_size_bytes, true);
 		// neat trick from Snabb: initialize to 0xFF to prevent rogue memory accesses on premature DMA activation
 		memset(mem.virt, -1, ring_size_bytes);
+		// tell the device where it can write to (its iova, so its view)
 		set_reg32(dev->addr, IXGBE_RDBAL(i), (uint32_t) (mem.phy & 0xFFFFFFFFull));
 		set_reg32(dev->addr, IXGBE_RDBAH(i), (uint32_t) (mem.phy >> 32));
 		set_reg32(dev->addr, IXGBE_RDLEN(i), ring_size_bytes);
@@ -185,8 +190,9 @@ static void init_tx(struct ixgbe_device* dev) {
 
 		// setup descriptor ring, see section 7.1.9
 		uint32_t ring_size_bytes = NUM_TX_QUEUE_ENTRIES * sizeof(union ixgbe_adv_tx_desc);
-		struct dma_memory mem = memory_allocate_dma(&dev->ixy, ring_size_bytes, true);
+		struct dma_memory mem = memory_allocate_dma(ring_size_bytes, true);
 		memset(mem.virt, -1, ring_size_bytes);
+		// tell the device where it can write to (its iova, so its view)
 		set_reg32(dev->addr, IXGBE_TDBAL(i), (uint32_t) (mem.phy & 0xFFFFFFFFull));
 		set_reg32(dev->addr, IXGBE_TDBAH(i), (uint32_t) (mem.phy >> 32));
 		set_reg32(dev->addr, IXGBE_TDLEN(i), ring_size_bytes);
@@ -286,11 +292,24 @@ struct ixy_device* ixgbe_init(const char* pci_addr, uint16_t rx_queues, uint16_t
 	if (tx_queues > MAX_QUEUES) {
 		error("cannot configure %d tx queues: limit is %d", tx_queues, MAX_QUEUES);
 	}
+
+	// Allocate memory for the ixgbe device that will be returned
 	struct ixgbe_device* dev = (struct ixgbe_device*) malloc(sizeof(struct ixgbe_device));
 	dev->ixy.pci_addr = strdup(pci_addr);
-#ifdef USE_VFIO
-	check_err(vfio_init(&dev->ixy), "failed to init vfio");
-#endif
+
+	// Check if we want the VFIO stuff
+	// This is done by checking if the device is in an IOMMU group.
+	char path[PATH_MAX];
+	snprintf(path, PATH_MAX, "/sys/bus/pci/devices/%s/iommu_group", pci_addr);
+	struct stat buffer;
+	dev->ixy.vfio = stat(path, &buffer) == 0;
+	if (dev->ixy.vfio) {
+		// initialize the IOMMU for this device
+		dev->ixy.vfio_fd = vfio_init(pci_addr);
+		if (dev->ixy.vfio_fd < 0) {
+			error("could not initialize the IOMMU for device %s", pci_addr);
+		}
+	}
 	dev->ixy.driver_name = driver_name;
 	dev->ixy.num_rx_queues = rx_queues;
 	dev->ixy.num_tx_queues = tx_queues;
@@ -299,7 +318,15 @@ struct ixy_device* ixgbe_init(const char* pci_addr, uint16_t rx_queues, uint16_t
 	dev->ixy.read_stats = ixgbe_read_stats;
 	dev->ixy.set_promisc = ixgbe_set_promisc;
 	dev->ixy.get_link_speed = ixgbe_get_link_speed;
-	dev->addr = pci_map_resource(pci_addr);
+
+	// Map BAR0 region
+	if (dev->ixy.vfio) {
+		debug("mapping BAR0 region via VFIO...");
+		dev->addr = vfio_map_region(dev->ixy.vfio_fd, VFIO_PCI_BAR0_REGION_INDEX);
+	} else {
+		debug("mapping BAR0 region via pci file...");
+		dev->addr = pci_map_resource(pci_addr);
+	}
 	dev->rx_queues = calloc(rx_queues, sizeof(struct ixgbe_rx_queue) + sizeof(void*) * MAX_RX_QUEUE_ENTRIES);
 	dev->tx_queues = calloc(tx_queues, sizeof(struct ixgbe_tx_queue) + sizeof(void*) * MAX_TX_QUEUE_ENTRIES);
 	reset_and_init(dev);
@@ -492,4 +519,3 @@ uint32_t ixgbe_tx_batch(struct ixy_device* ixy, uint16_t queue_id, struct pkt_bu
 	set_reg32(dev->addr, IXGBE_TDT(queue_id), queue->tx_index);
 	return sent;
 }
-

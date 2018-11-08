@@ -1,20 +1,16 @@
 #include <assert.h>
 #include <errno.h>
 #include <linux/limits.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <sys/file.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "pci.h"
 #include "log.h"
 
 void remove_driver(const char* pci_addr) {
-#ifdef USE_VFIO
-	// don't remove VFIO driver
-	return;
-#endif
 	char path[PATH_MAX];
 	snprintf(path, PATH_MAX, "/sys/bus/pci/devices/%s/driver/unbind", pci_addr);
 	int fd = open(path, O_WRONLY);
@@ -55,10 +51,10 @@ uint8_t* pci_map_resource(const char* pci_addr) {
 	return (uint8_t*) check_err(mmap(NULL, stat.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0), "mmap pci resource");
 }
 
-int pci_open_resource(const char* pci_addr, const char* resource) {
+int pci_open_resource(const char* pci_addr, const char* resource, int flags) {
 	char path[PATH_MAX];
 	snprintf(path, PATH_MAX, "/sys/bus/pci/devices/%s/%s", pci_addr, resource);
 	debug("Opening PCI resource at %s", path);
-	int fd = check_err(open(path, O_RDWR), "open pci resource");
+	int fd = check_err(open(path, flags), "open pci resource");
 	return fd;
 }

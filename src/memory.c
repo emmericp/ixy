@@ -1,19 +1,23 @@
 #include "memory.h"
-#include "log.h"
 #include "driver/device.h"
+#include "log.h"
 
-#include <stddef.h>
-#include <linux/limits.h>
-#include <stdio.h>
 #include <fcntl.h>
-#include <unistd.h>
-#include <sys/mman.h>
-#include <sys/ioctl.h>
-
-#ifdef USE_VFIO
-#include "vfio.h"
+#include <linux/limits.h>
+#include <linux/mman.h>
 #include <linux/vfio.h>
-#endif
+#include <stddef.h>
+#include <stdio.h>
+#include <sys/ioctl.h>
+#include <sys/mman.h>
+#include <unistd.h>
+
+#include "libixy-vfio.h"
+
+// we want one VFIO Container for all NICs, so every NIC can read from every
+// other NICs memory, especially the mempool. When not using the IOMMU / VFIO,
+// this variable is unused.
+volatile int VFIO_CONTAINER_FILE_DESCRIPTOR = -1;
 
 // translate a virtual address to a physical one via /proc/self/pagemap
 static uintptr_t virt_to_phys(void* virt) {
@@ -37,58 +41,63 @@ static uint32_t huge_pg_id;
 // this requires hugetlbfs to be mounted at /mnt/huge
 // not using anonymous hugepages because hugetlbfs can give us multiple pages with contiguous virtual addresses
 // allocating anonymous pages would require manual remapping which is more annoying than handling files
-struct dma_memory memory_allocate_dma(struct ixy_device* dev, size_t size, bool require_contiguous) {
-	// round up to multiples of 2 MB if necessary, this is the wasteful part
-	// this could be fixed by co-locating allocations on the same page until a request would be too large
-	// when fixing this: make sure to align on 128 byte boundaries (82599 dma requirement)
-	if (size % HUGE_PAGE_SIZE) {
-		size = ((size >> HUGE_PAGE_BITS) + 1) << HUGE_PAGE_BITS;
+struct dma_memory memory_allocate_dma(size_t size, bool require_contiguous) {
+	if (VFIO_CONTAINER_FILE_DESCRIPTOR != -1) {
+		// VFIO == -1 means that there is no VFIO container set, i.e. VFIO / IOMMU is not activated
+		debug("allocating dma memory via VFIO");
+		void* virt_addr = (void*) check_err(mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS | MAP_HUGETLB | MAP_HUGE_2MB, -1, 0), "mmap hugepage");
+		// create IOMMU mapping
+		uint64_t iova = (uint64_t) vfio_map_dma(virt_addr, size);
+		return (struct dma_memory){
+			// for VFIO, this needs to point to the device view memory = IOVA!
+			.virt = virt_addr,
+			.phy = iova
+		};
+	} else {
+		debug("allocating dma memory via huge page");
+		// round up to multiples of 2 MB if necessary, this is the wasteful part
+		// this could be fixed by co-locating allocations on the same page until a request would be too large
+		// when fixing this: make sure to align on 128 byte boundaries (82599 dma requirement)
+		if (size % HUGE_PAGE_SIZE) {
+			size = ((size >> HUGE_PAGE_BITS) + 1) << HUGE_PAGE_BITS;
+		}
+		if (require_contiguous && size > HUGE_PAGE_SIZE) {
+			// this is the place to implement larger contiguous physical mappings if that's ever needed
+			error("could not map physically contiguous memory");
+		}
+		// unique filename, C11 stdatomic.h requires a too recent gcc, we want to support gcc 4.8
+		uint32_t id = __sync_fetch_and_add(&huge_pg_id, 1);
+		char path[PATH_MAX];
+		snprintf(path, PATH_MAX, "/mnt/huge/ixy-%d-%d", getpid(), id);
+		// temporary file, will be deleted to prevent leaks of persistent pages
+		int fd = check_err(open(path, O_CREAT | O_RDWR, S_IRWXU), "open hugetlbfs file, check that /mnt/huge is mounted");
+		check_err(ftruncate(fd, (off_t) size), "allocate huge page memory, check hugetlbfs configuration");
+		void* virt_addr = (void*) check_err(mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_HUGETLB, fd, 0), "mmap hugepage");
+		// never swap out DMA memory
+		check_err(mlock(virt_addr, size), "disable swap for DMA memory");
+		// don't keep it around in the hugetlbfs
+		close(fd);
+		unlink(path);
+		return (struct dma_memory) {
+			.virt = virt_addr,
+			.phy = virt_to_phys(virt_addr)
+		};
 	}
-	if (require_contiguous && size > HUGE_PAGE_SIZE) {
-		// this is the place to implement larger contiguous physical mappings if that's ever needed
-		error("could not map physically contiguous memory");
-	}
-	// unique filename, C11 stdatomic.h requires a too recent gcc, we want to support gcc 4.8
-	uint32_t id = __sync_fetch_and_add(&huge_pg_id, 1);
-	char path[PATH_MAX];
-	snprintf(path, PATH_MAX, "/mnt/huge/ixy-%d-%d", getpid(), id);
-	// temporary file, will be deleted to prevent leaks of persistent pages
-	int fd = check_err(open(path, O_CREAT | O_RDWR, S_IRWXU), "open hugetlbfs file, check that /mnt/huge is mounted");
-	check_err(ftruncate(fd, (off_t) size), "allocate huge page memory, check hugetlbfs configuration");
-	void* virt_addr = (void*) check_err(mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_HUGETLB, fd, 0), "mmap hugepage");
-	// never swap out DMA memory
-	check_err(mlock(virt_addr, size), "disable swap for DMA memory");
-	// don't keep it around in the hugetlbfs
-	close(fd);
-	unlink(path);
-#ifdef USE_VFIO
-	// create IOMMU mapping
-	for(uint32_t i = 0; i < size / HUGE_PAGE_SIZE; i++){
-		void* addr = virt_addr + HUGE_PAGE_SIZE*i;
-		uint64_t vaddr = (uint64_t)addr;
-		uint64_t iova = (uint64_t)virt_to_phys(addr);
-		check_err(vfio_map_dma(dev, vaddr, iova, HUGE_PAGE_SIZE), "faile to create IOMMU mapping");
-	}
-#endif
-	return (struct dma_memory) {
-		.virt = virt_addr,
-		.phy = virt_to_phys(virt_addr)
-	};
 }
 
 // allocate a memory pool from which DMA'able packet buffers can be allocated
 // this is currently not yet thread-safe, i.e., a pool can only be used by one thread,
 // this means a packet can only be sent/received by a single thread
 // entry_size can be 0 to use the default
-struct mempool* memory_allocate_mempool(struct ixy_device* dev, uint32_t num_entries, uint32_t entry_size) {
+struct mempool* memory_allocate_mempool(uint32_t num_entries, uint32_t entry_size) {
 	entry_size = entry_size ? entry_size : 2048;
 	// require entries that neatly fit into the page size, this makes the memory pool much easier
 	// otherwise our base_addr + index * size formula would be wrong because we can't cross a page-boundary
-	if (HUGE_PAGE_SIZE % entry_size) {
+	if ((VFIO_CONTAINER_FILE_DESCRIPTOR == -1) && HUGE_PAGE_SIZE % entry_size) {
 		error("entry size must be a divisor of the huge page size (%d)", HUGE_PAGE_SIZE);
 	}
 	struct mempool* mempool = (struct mempool*) malloc(sizeof(struct mempool) + num_entries * sizeof(uint32_t));
-	struct dma_memory mem = memory_allocate_dma(dev, num_entries * entry_size, false);
+	struct dma_memory mem = memory_allocate_dma(num_entries * entry_size, false);
 	mempool->num_entries = num_entries;
 	mempool->buf_size = entry_size;
 	mempool->base_addr = mem.virt;
@@ -96,9 +105,14 @@ struct mempool* memory_allocate_mempool(struct ixy_device* dev, uint32_t num_ent
 	for (uint32_t i = 0; i < num_entries; i++) {
 		mempool->free_stack[i] = i;
 		struct pkt_buf* buf = (struct pkt_buf*) (((uint8_t*) mempool->base_addr) + i * entry_size);
-		// physical addresses are not contiguous within a pool, we need to get the mapping
-		// minor optimization opportunity: this only needs to be done once per page
-		buf->buf_addr_phy = virt_to_phys(buf);
+		if (VFIO_CONTAINER_FILE_DESCRIPTOR != -1) {
+			// "physical" memory is iova address which is identity mapped to vaddr
+			buf->buf_addr_phy = (uintptr_t) buf;
+		} else {
+			// physical addresses are not contiguous within a pool, we need to get the mapping
+			// minor optimization opportunity: this only needs to be done once per page
+			buf->buf_addr_phy = virt_to_phys(buf);
+		}
 		buf->mempool_idx = i;
 		buf->mempool = mempool;
 		buf->size = 0;
@@ -129,3 +143,12 @@ void pkt_buf_free(struct pkt_buf* buf) {
 	mempool->free_stack[mempool->free_stack_top++] = buf->mempool_idx;
 }
 
+// reads the global VFIO container
+int get_vfio_container() {
+	return VFIO_CONTAINER_FILE_DESCRIPTOR;
+}
+
+// globally sets the VFIO container and returns the set value
+void set_vfio_container(int fd) {
+	VFIO_CONTAINER_FILE_DESCRIPTOR = fd;
+}

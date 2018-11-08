@@ -9,8 +9,12 @@ Makefile
 .*.s[a-z][a-z]
 
 # vscode
+.vscode
+*.code-workspace
 *.idea
 
 build
 ixy-fwd
 ixy-pktgen
+*.o
+*.so
