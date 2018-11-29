@@ -16,6 +16,7 @@ Check out the `ixy-fwd` and `ixy-pktgen` example apps and look through the code.
 The code often references sections in the [Intel 82599 datasheet](https://www.intel.com/content/dam/www/public/us/en/documents/datasheets/82599-10-gbe-controller-datasheet.pdf) or the [VirtIO specification](http://docs.oasis-open.org/virtio/virtio/v1.0/virtio-v1.0.pdf), so keep them open while reading the code.
 You will be surprised how simple a full driver for a network card can be.
 
+Don't like C? We also have [implementations in other languages](https://github.com/ixy-languages/ixy-languages) including Rust, Go, Haskell, and OCaml.
 
 
 # Features
@@ -130,6 +131,8 @@ The good news is that multi-threaded mempools are essentially the same problem a
 ## Why C and not a more reasonable language?
 It's the lowest common denominator that everyone should be able to understand -- this is for educational purposes only.
 I've taken care to keep the code simple and understandable.
+
+We are working on [implementations in different languages](https://github.com/ixy-languages/ixy-languages) including Rust, Go, Haskell, and OCaml.
 
 ## I can't get line rate :(
 We are currently facing a weird problem that impacts performance if your CPU is too fast. DPDK had the same problem in the past. Try applying bidirectional traffic to the forwarder and/or *underclock* your CPU to speed up ixy.
