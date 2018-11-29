@@ -414,14 +414,13 @@ uint32_t ixgbe_tx_batch(struct ixy_device* ixy, uint16_t queue_id, struct pkt_bu
 	// 2. the read format which is read by the NIC and written by us, this is used in step 2
 
 	uint16_t clean_index = queue->clean_index; // next descriptor to clean up
-	uint16_t cur_index = queue->tx_index; // next descriptor to use for tx
 
 	// step 1: clean up descriptors that were sent out by the hardware and return them to the mempool
 	// start by reading step 2 which is done first for each packet
 	// cleaning up must be done in batches for performance reasons, so this is unfortunately somewhat complicated
 	while (true) {
 		// figure out how many descriptors can be cleaned up
-		int32_t cleanable = cur_index - clean_index; // cur is always ahead of clean (invariant of our queue)
+		int32_t cleanable = queue->tx_index - clean_index; // tx_index is always ahead of clean (invariant of our queue)
 		if (cleanable < 0) { // handle wrap-around
 			cleanable = queue->num_entries + cleanable;
 		}
@@ -460,16 +459,16 @@ uint32_t ixgbe_tx_batch(struct ixy_device* ixy, uint16_t queue_id, struct pkt_bu
 	// step 2: send out as many of our packets as possible
 	uint32_t sent;
 	for (sent = 0; sent < num_bufs; sent++) {
-		uint32_t next_index = wrap_ring(cur_index, queue->num_entries);
+		uint32_t next_index = wrap_ring(queue->tx_index, queue->num_entries);
 		// we are full if the next index is the one we are trying to reclaim
 		if (clean_index == next_index) {
 			break;
 		}
 		struct pkt_buf* buf = bufs[sent];
 		// remember virtual address to clean it up later
-		queue->virtual_addresses[cur_index] = (void*) buf;
-		queue->tx_index = wrap_ring(queue->tx_index, queue->num_entries );
-		volatile union ixgbe_adv_tx_desc* txd = queue->descriptors + cur_index;
+		queue->virtual_addresses[queue->tx_index] = (void*) buf;
+		volatile union ixgbe_adv_tx_desc* txd = queue->descriptors + queue->tx_index;
+		queue->tx_index = next_index;
 		// NIC reads from here
 		txd->read.buffer_addr = buf->buf_addr_phy + offsetof(struct pkt_buf, data);
 		// always the same flags: one buffer (EOP), advanced data descriptor, CRC offload, data length
@@ -480,7 +479,6 @@ uint32_t ixgbe_tx_batch(struct ixy_device* ixy, uint16_t queue_id, struct pkt_bu
 		// 	* ip checksum offloading is trivial: just set the offset
 		// 	* tcp/udp checksum offloading is more annoying, you have to precalculate the pseudo-header checksum
 		txd->read.olinfo_status = buf->size << IXGBE_ADVTXD_PAYLEN_SHIFT;
-		cur_index = next_index;
 	}
 	// send out by advancing tail, i.e., pass control of the bufs to the nic
 	// this seems like a textbook case for a release memory order, but Intel's driver doesn't even use a compiler barrier here
