@@ -24,6 +24,8 @@ Don't like C? We also have [implementations in other languages](https://github.c
 * Driver for paravirtualized virtio NICs
 * Less than 1000 lines of C code for a packet forwarder including the whole driver
 * No kernel modules needed
+* Can run without root privileges ([not yet merged, see fork](https://github.com/huberste/ixy)) 
+* IOMMU support ([not yet merged, see fork](https://github.com/huberste/ixy)) 
 * Simple API with memory management, similar to DPDK, easier to use than APIs based on a ring interface (e.g., netmap)
 * Support for multiple device queues and multiple threads
 * Super fast, can forward > 25 million packets per second on a single 3.0 GHz CPU core
@@ -95,10 +97,6 @@ NICs that rely too much on firmware (e.g., Intel XL710) are not fun, because you
 The same is true for NICs like the ones by Mellanox that keep a lot of magic in kernel modules, even when being used by frameworks like DPDK.
 
 Interesting candidates would be NICs from the Intel igb and e1000e families as they quite common and reasonably cheap.
-
-### IOMMU support
-Adding support for the IOMMU via the Linux `vfio` driver would allow us to build a safe userspace driver that can drop all privileges after startup.
-Some work towards this can be [found on a branch here](https://github.com/mmisono/ixy/tree/vfio).
 
 ### Better NUMA support
 PCIe devices are attached to a specific CPU in NUMA systems.
