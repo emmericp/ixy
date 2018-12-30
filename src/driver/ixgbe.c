@@ -39,6 +39,8 @@ struct ixgbe_tx_queue {
 	uint16_t clean_index;
 	// position to insert packets for transmission
 	uint16_t tx_index;
+	// head writeback pointer
+	uint32_t* head_pointer;
 	// virtual addresses to map descriptors back to their mbuf for freeing
 	void* virtual_addresses[];
 };
@@ -196,13 +198,23 @@ static void init_tx(struct ixgbe_device* dev) {
 		// there are no defines for this in ixgbe_type.h for some reason
 		// pthresh: 6:0, hthresh: 14:8, wthresh: 22:16
 		txdctl &= ~(0x3F | (0x3F << 8) | (0x3F << 16)); // clear bits
-		txdctl |= (36 | (8 << 8) | (4 << 16)); // from DPDK
+		txdctl |= (36 | (8 << 8) | (0 << 16)); // from DPDK
 		set_reg32(dev->addr, IXGBE_TXDCTL(i), txdctl);
 
 		// private data for the driver, 0-initialized
 		struct ixgbe_tx_queue* queue = ((struct ixgbe_tx_queue*)(dev->tx_queues)) + i;
 		queue->num_entries = NUM_TX_QUEUE_ENTRIES;
 		queue->descriptors = (union ixgbe_adv_tx_desc*) mem.virt;
+
+		mem = memory_allocate_dma(4, true);
+		queue->head_pointer = mem.virt;
+		info("virt %p phy %lx", mem.virt, mem.phy);
+
+		// Set writeback head pointer address
+		set_reg32(dev->addr, IXGBE_TDWBAL(i), (uint32_t) (1 | mem.phy));
+		set_reg32(dev->addr, IXGBE_TDWBAH(i), (mem.phy >> 32));
+		debug("TDWBAL %x", get_reg32(dev->addr, IXGBE_TDWBAL(i)));
+		debug("TDWBAH %x", get_reg32(dev->addr, IXGBE_TDWBAH(i)));
 	}
 	// final step: enable DMA
 	set_reg32(dev->addr, IXGBE_DMATXCTL, IXGBE_DMATXCTL_TE);
@@ -416,12 +428,18 @@ uint32_t ixgbe_tx_batch(struct ixy_device* ixy, uint16_t queue_id, struct pkt_bu
 	uint16_t clean_index = queue->clean_index; // next descriptor to clean up
 	uint16_t cur_index = queue->tx_index; // next descriptor to use for tx
 
+	//uint32_t iio_head = get_reg32(dev, IXGBE_TDH(queue_id));
+	uint32_t ptr_head = *queue->head_pointer;
+	//debug("TDH %u, head pointer: %u", iio_head, ptr_head);
+
 	// step 1: clean up descriptors that were sent out by the hardware and return them to the mempool
 	// start by reading step 2 which is done first for each packet
 	// cleaning up must be done in batches for performance reasons, so this is unfortunately somewhat complicated
-	while (true) {
+	//while (true) {
 		// figure out how many descriptors can be cleaned up
-		int32_t cleanable = cur_index - clean_index; // cur is always ahead of clean (invariant of our queue)
+		//int32_t cleanable = cur_index - clean_index; // cur is always ahead of clean (invariant of our queue)
+		/*
+		int32_t cleanable = *queue->head_pointer - clean_index;
 		if (cleanable < 0) { // handle wrap-around
 			cleanable = queue->num_entries + cleanable;
 		}
@@ -434,8 +452,33 @@ uint32_t ixgbe_tx_batch(struct ixy_device* ixy, uint16_t queue_id, struct pkt_bu
 		if (cleanup_to >= queue->num_entries) {
 			cleanup_to -= queue->num_entries;
 		}
+		*/
+
+		int32_t cleanup_to = ptr_head;
+		int32_t i = clean_index;
+		// Ring empty
+		if (clean_index == cleanup_to) {
+			goto skip_clean;
+		}
+		cleanup_to--;
+		if (cleanup_to < 0) {
+			cleanup_to += queue->num_entries;
+		}
+		//debug("cleaning from %i to %i", clean_index, cleanup_to);
+		while (true) {
+			struct pkt_buf* buf = queue->virtual_addresses[i];
+			pkt_buf_free(buf);
+			if (i == cleanup_to) {
+				break;
+			}
+			i = wrap_ring(i, queue->num_entries);
+		}
+		clean_index = wrap_ring(cleanup_to, queue->num_entries);
+
+		/*
 		volatile union ixgbe_adv_tx_desc* txd = queue->descriptors + cleanup_to;
 		uint32_t status = txd->wb.status;
+
 		// hardware sets this flag as soon as it's sent out, we can give back all bufs in the batch back to the mempool
 		if (status & IXGBE_ADVTXD_STAT_DD) {
 			int32_t i = clean_index;
@@ -454,8 +497,10 @@ uint32_t ixgbe_tx_batch(struct ixy_device* ixy, uint16_t queue_id, struct pkt_bu
 			// the queue forever if you stop transmitting, but that's not a real concern
 			break;
 		}
-	}
+		*/
+	//}
 	queue->clean_index = clean_index;
+skip_clean:;
 
 	// step 2: send out as many of our packets as possible
 	uint32_t sent;
@@ -474,7 +519,13 @@ uint32_t ixgbe_tx_batch(struct ixy_device* ixy, uint16_t queue_id, struct pkt_bu
 		txd->read.buffer_addr = buf->buf_addr_phy + offsetof(struct pkt_buf, data);
 		// always the same flags: one buffer (EOP), advanced data descriptor, CRC offload, data length
 		txd->read.cmd_type_len =
-			IXGBE_ADVTXD_DCMD_EOP | IXGBE_ADVTXD_DCMD_RS | IXGBE_ADVTXD_DCMD_IFCS | IXGBE_ADVTXD_DCMD_DEXT | IXGBE_ADVTXD_DTYP_DATA | buf->size;
+			IXGBE_ADVTXD_DCMD_EOP | /*IXGBE_ADVTXD_DCMD_RS |*/ IXGBE_ADVTXD_DCMD_IFCS | IXGBE_ADVTXD_DCMD_DEXT | IXGBE_ADVTXD_DTYP_DATA | buf->size;
+
+		// RS bit signals the NIC head pointer updates
+		// Implement someting more fancy. I did not find an upper limit for gaps, but sent packets can't be cleaned until one with the bit set passes.
+		if (sent == num_bufs - 1) {
+			txd->read.cmd_type_len |= IXGBE_ADVTXD_DCMD_RS;
+		}
 		// no fancy offloading stuff - only the total payload length
 		// implement offloading flags here:
 		// 	* ip checksum offloading is trivial: just set the offset
@@ -487,4 +538,5 @@ uint32_t ixgbe_tx_batch(struct ixy_device* ixy, uint16_t queue_id, struct pkt_bu
 	set_reg32(dev->addr, IXGBE_TDT(queue_id), queue->tx_index);
 	return sent;
 }
+
 
