@@ -6,6 +6,7 @@ set(CMAKE_C_STANDARD 11)
 add_compile_options(-g -O2 -march=native -fomit-frame-pointer -std=c11
 	-D_XOPEN_SOURCE=700
 	-D_DEFAULT_SOURCE
+	-D_GNU_SOURCE
 	-Wall
 	-Wextra
 	-Wno-unused-parameter
@@ -22,3 +23,4 @@ set(SOURCE_COMMON src/pci.c src/memory.c src/stats.c src/driver/device.c src/dri
 
 add_executable(ixy-pktgen src/app/ixy-pktgen.c ${SOURCE_COMMON})
 add_executable(ixy-fwd src/app/ixy-fwd.c ${SOURCE_COMMON})
+add_executable(ixy-dma-allocate src/app/ixy-dma-allocate.c ${SOURCE_COMMON})
