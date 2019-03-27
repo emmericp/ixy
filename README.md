@@ -23,9 +23,9 @@ Don't like C? We also have [implementations in other languages](https://github.c
 * Driver for Intel NICs in the `ixgbe` family, i.e., the 82599ES family (aka Intel X520)
 * Driver for paravirtualized virtio NICs
 * Less than 1000 lines of C code for a packet forwarder including the whole driver
-* No kernel modules needed
-* Can run without root privileges ([not yet merged, see fork](https://github.com/huberste/ixy)) 
-* IOMMU support ([not yet merged, see fork](https://github.com/huberste/ixy)) 
+* No kernel modules needed (except `vfio-pci` when using the IOMMU / VFIO)
+* Can run without root privileges (when using the IOMMU / VFIO)
+* IOMMU support (see Using the IOMMU / VFIO)
 * Simple API with memory management, similar to DPDK, easier to use than APIs based on a ring interface (e.g., netmap)
 * Support for multiple device queues and multiple threads
 * Super fast, can forward > 25 million packets per second on a single 3.0 GHz CPU core
@@ -86,6 +86,35 @@ We currently have a simple check if the device is actually a NIC, but trying to 
 	`03:00.0 Ethernet controller: Intel Corporation 82599ES 10-Gigabit SFI/SFP+ Network Connection (rev 01)`
 	
 	which means that I have to pass `0000:03:00.0` as parameter to use it.
+
+## Using the IOMMU / VFIO
+The usage of the IOMMU via the `vfio-pci` driver is implemented for ixgbe devices (Intel X520, X540, and X550).
+To use it, you have to:
+
+0. Enable the IOMMU in the BIOS.
+	On most Intel machines, the BIOS entry is called `VT-d` and has to be enabled in addition to any other virtualization technique.
+
+1. Enable the IOMMU in the linux kernel.
+	Add `intel_iommu=on` to your cmdline (if you are running a grub, the file `/etc/default/grub.cfg` contains a `GRUB_CMDLINE_LINUX` where you can add it).
+
+2. Get the PCI address, vendor and device ID:
+	`lspci -nn | grep Ether` returns something like `05:00.0 Ethernet controller [0200]: Intel Corporation Ethernet Controller 10-Gigabit X540-AT2 [8086:1528] (rev 01)`.
+	In this case, `0000:05:00.0` is our PCI Address, and `8086` and `1528` are the vendor and device id, respectively.
+
+3. Unbind the device from the `ixgbe` driver.
+	`echo $PCI_ADDRESS > /sys/bus/pci/devices/$PCI_ADDRESS/driver/unbind`
+
+4. Enable the `vfio-pci` driver.
+	`modprobe vfio-pci`
+
+5. Bind the device to the `vfio-pci` driver.
+	`echo $VENDOR_ID $DEVICE_ID > /sys/bus/pci/drivers/vfio-pci/new_id`
+
+6. Chown the device to the user.
+	`chown $USER:$GROUP /dev/vfio/*`
+
+6. That's it!
+	Now you can compile and run ixy as stated above!
 
 # Wish list
 It's not the plan to implement every single feature, but a few more things would be nice to have.

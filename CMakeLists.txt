@@ -13,12 +13,12 @@ add_compile_options(-g -O2 -march=native -fomit-frame-pointer -std=c11
 	-Wformat=2
 )
 
-
 include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-set(SOURCE_COMMON src/pci.c src/memory.c src/stats.c src/driver/device.c src/driver/ixgbe.c src/driver/virtio.c)
+set(SOURCE_COMMON src/pci.c src/memory.c src/stats.c src/driver/device.c src/driver/ixgbe.c src/driver/virtio.c src/libixy-vfio.c)
 
 add_executable(ixy-pktgen src/app/ixy-pktgen.c ${SOURCE_COMMON})
 add_executable(ixy-fwd src/app/ixy-fwd.c ${SOURCE_COMMON})
+add_library(ixy-vfio SHARED src/libixy-vfio.c)

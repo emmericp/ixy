@@ -1,6 +1,7 @@
 #include <emmintrin.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/file.h>
 #include <unistd.h>
 
 #include "driver/device.h"
@@ -9,6 +10,8 @@
 #include "pci.h"
 #include "virtio.h"
 #include "virtio_type.h"
+
+#include "libixy-vfio.h"
 
 static const char* driver_name = "ixy-virtio";
 
@@ -335,9 +338,11 @@ struct ixy_device* virtio_init(const char* pci_addr, uint16_t rx_queues, uint16_
 		error("cannot configure %d tx queues: limit is %d", tx_queues, 1);
 	}
 	remove_driver(pci_addr);
-	enable_dma(pci_addr);
 	struct virtio_device* dev = calloc(1, sizeof(*dev));
 	dev->ixy.pci_addr = strdup(pci_addr);
+	if (dev->ixy.vfio) {
+		check_err(vfio_init(dev->ixy.pci_addr), "init vfio");
+	}
 	dev->ixy.driver_name = driver_name;
 	dev->ixy.num_rx_queues = rx_queues;
 	dev->ixy.num_tx_queues = tx_queues;
@@ -346,14 +351,14 @@ struct ixy_device* virtio_init(const char* pci_addr, uint16_t rx_queues, uint16_
 	dev->ixy.read_stats = virtio_read_stats;
 	dev->ixy.set_promisc = virtio_set_promisc;
 	dev->ixy.get_link_speed = virtio_get_link_speed;
-
-	int config = pci_open_resource(pci_addr, "config");
+	enable_dma(pci_addr);
+	int config = pci_open_resource(pci_addr, "config", O_RDONLY);
 	uint16_t device_id = read_io16(config, 2);
 	close(config);
 	// Check config if device is legacy network card
 	if (device_id == 0x1000) {
 		info("Detected virtio legacy network card");
-		dev->fd = pci_open_resource(pci_addr, "resource0");
+		dev->fd = pci_open_resource(pci_addr, "resource0", O_RDWR);
 		virtio_legacy_init(dev);
 	} else {
 		error("Modern device not supported");
@@ -412,7 +417,7 @@ uint32_t virtio_rx_batch(struct ixy_device* ixy, uint16_t queue_id, struct pkt_b
 		memcpy(buf->head_room + sizeof(buf->head_room) - sizeof(net_hdr), &net_hdr, sizeof(net_hdr));
 		vq->vring.desc[idx].len = buf->size + sizeof(net_hdr);
 		vq->vring.desc[idx].addr =
-		    buf->buf_addr_phy + offsetof(struct pkt_buf, head_room) + sizeof(buf->head_room) - sizeof(net_hdr);
+			buf->buf_addr_phy + offsetof(struct pkt_buf, head_room) + sizeof(buf->head_room) - sizeof(net_hdr);
 		vq->vring.desc[idx].flags = VRING_DESC_F_WRITE;
 		vq->vring.desc[idx].next = 0;
 		vq->virtual_addresses[idx] = buf;
@@ -471,7 +476,7 @@ uint32_t virtio_tx_batch(struct ixy_device* ixy, uint16_t queue_id, struct pkt_b
 
 		vq->vring.desc[idx].len = buf->size + sizeof(net_hdr);
 		vq->vring.desc[idx].addr =
-		    buf->buf_addr_phy + offsetof(struct pkt_buf, head_room) + sizeof(buf->head_room) - sizeof(net_hdr);
+			buf->buf_addr_phy + offsetof(struct pkt_buf, head_room) + sizeof(buf->head_room) - sizeof(net_hdr);
 		vq->vring.desc[idx].flags = 0;
 		vq->vring.desc[idx].next = 0;
 		vq->vring.avail->ring[idx] = idx;

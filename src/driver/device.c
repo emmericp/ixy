@@ -1,3 +1,5 @@
+#include <sys/file.h>
+
 #include "device.h"
 #include "driver/ixgbe.h"
 #include "driver/virtio.h"
@@ -5,7 +7,11 @@
 
 struct ixy_device* ixy_init(const char* pci_addr, uint16_t rx_queues, uint16_t tx_queues) {
 	// Read PCI configuration space
-	int config = pci_open_resource(pci_addr, "config");
+	// For VFIO, we could access the config space another way
+	// (VFIO_PCI_CONFIG_REGION_INDEX). This is not needed, though, because
+	// every config file should be world-readable, and here we
+	// only read the vendor and device id.
+	int config = pci_open_resource(pci_addr, "config", O_RDONLY);
 	uint16_t vendor_id = read_io16(config, 0);
 	uint16_t device_id = read_io16(config, 2);
 	uint32_t class_id = read_io32(config, 8) >> 24;
