@@ -10,6 +10,22 @@ void vfio_enable_dma(int device_fd);
 // -1 on error
 int vfio_init(const char* pci_addr);
 
+int vfio_enable_msi(int device_fd);
+
+int vfio_disable_msi(int device_fd);
+
+int vfio_enable_msix(int device_fd, uint32_t interrupt_vector);
+
+int vfio_disable_msix(int device_fd);
+
+int vfio_setup_interrupt(int device_fd);
+
+int vfio_epoll_wait(int epoll_fd, int maxevents, int timeout);
+
+int vfio_epoll_ctl(int event_fd);
+
+int vfio_init(const char* pci_addr);
+
 // returns a uint8_t pointer to the MMAPED region or MAP_FAILED if failed.
 // region_index is to be taken from linux/vfio.h
 uint8_t* vfio_map_region(int vfio_fd, int region_index);

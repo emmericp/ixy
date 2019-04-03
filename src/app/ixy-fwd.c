@@ -32,8 +32,8 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}
 
-	struct ixy_device* dev1 = ixy_init(argv[1], 1, 1);
-	struct ixy_device* dev2 = ixy_init(argv[2], 1, 1);
+	struct ixy_device* dev1 = ixy_init(argv[1], 1, 1, -1);
+	struct ixy_device* dev2 = ixy_init(argv[2], 1, 1, 0);
 
 	uint64_t last_stats_printed = monotonic_time();
 	struct device_stats stats1, stats1_old;
