@@ -282,9 +282,6 @@ static void virtio_legacy_init(struct virtio_device* dev) {
 	// Negotiate features
 	uint32_t host_features = read_io32(dev->fd, VIRTIO_PCI_HOST_FEATURES);
 	debug("Host features: %x", host_features);
-	if (!(host_features & VIRTIO_F_VERSION_1)) {
-		error("In legacy mode but device is not legacy");
-	}
 	const uint32_t required_features = (1u << VIRTIO_NET_F_CSUM) | (1u << VIRTIO_NET_F_GUEST_CSUM) |
 					   (1u << VIRTIO_NET_F_CTRL_VQ) | (1u << VIRTIO_F_ANY_LAYOUT) |
 					   (1u << VIRTIO_NET_F_CTRL_RX) /*| (1u<<VIRTIO_NET_F_MQ)*/;
