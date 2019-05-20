@@ -11,8 +11,6 @@
 #include "virtio.h"
 #include "virtio_type.h"
 
-#include "libixy-vfio.h"
-
 static const char* driver_name = "ixy-virtio";
 
 static inline void virtio_legacy_notify_queue(struct virtio_device* dev, uint16_t idx) {
@@ -340,9 +338,6 @@ struct ixy_device* virtio_init(const char* pci_addr, uint16_t rx_queues, uint16_
 	remove_driver(pci_addr);
 	struct virtio_device* dev = calloc(1, sizeof(*dev));
 	dev->ixy.pci_addr = strdup(pci_addr);
-	if (dev->ixy.vfio) {
-		check_err(vfio_init(dev->ixy.pci_addr), "init vfio");
-	}
 	dev->ixy.driver_name = driver_name;
 	dev->ixy.num_rx_queues = rx_queues;
 	dev->ixy.num_tx_queues = tx_queues;
