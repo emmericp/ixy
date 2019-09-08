@@ -13,8 +13,14 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/eventfd.h>
+#include <sys/epoll.h>
 
 #include <driver/device.h>
+
+#define IRQ_SET_BUF_LEN (sizeof(struct vfio_irq_set) + sizeof(int))
+#define MAX_INTERRUPT_VECTORS 32
+#define MSIX_IRQ_SET_BUF_LEN (sizeof(struct vfio_irq_set) + sizeof(int) * (MAX_INTERRUPT_VECTORS + 1))
 
 ssize_t MIN_DMA_MEMORY = 4096; // we can not allocate less than page_size memory
 
@@ -33,8 +39,188 @@ void vfio_enable_dma(int device_fd) {
 	assert(pwrite(device_fd, &dma, 2, conf_reg.offset + command_register_offset) == 2);
 }
 
+/**
+ * Enable VFIO MSI interrupts.
+ * @param device_fd The VFIO file descriptor.
+ * @return The event file descriptor.
+ */
+int vfio_enable_msi(int device_fd) {
+	info("Enable MSI Interrupts");
+	char irq_set_buf[IRQ_SET_BUF_LEN];
+	int* fd_ptr;
+
+	// setup event fd
+	int event_fd = eventfd(0, 0);
+
+	struct vfio_irq_set* irq_set = (struct vfio_irq_set*) irq_set_buf;
+	irq_set->argsz = sizeof(irq_set_buf);
+	irq_set->count = 1;
+	irq_set->flags = VFIO_IRQ_SET_DATA_EVENTFD | VFIO_IRQ_SET_ACTION_TRIGGER;
+	irq_set->index = VFIO_PCI_MSI_IRQ_INDEX;
+	irq_set->start = 0;
+	fd_ptr = (int*) &irq_set->data;
+	*fd_ptr = event_fd;
+
+	check_err(ioctl(device_fd, VFIO_DEVICE_SET_IRQS, irq_set), "enable MSI interrupts");
+
+	return event_fd;
+}
+
+/**
+ * Disable VFIO MSI interrupts.
+ * @param device_fd The VFIO file descriptor.
+ * @return 0 on success.
+ */
+int vfio_disable_msi(int device_fd) {
+	info("Disable MSI Interrupts");
+	char irq_set_buf[IRQ_SET_BUF_LEN];
+
+	struct vfio_irq_set* irq_set = (struct vfio_irq_set*) irq_set_buf;
+	irq_set->argsz = sizeof(irq_set_buf);
+	irq_set->count = 0;
+	irq_set->flags = VFIO_IRQ_SET_DATA_NONE | VFIO_IRQ_SET_ACTION_TRIGGER;
+	irq_set->index = VFIO_PCI_MSI_IRQ_INDEX;
+	irq_set->start = 0;
+
+	check_err(ioctl(device_fd, VFIO_DEVICE_SET_IRQS, irq_set), "disable MSI interrupts");
+
+	return 0;
+}
+
+/**
+ * Enable VFIO MSI-X interrupts.
+ * @param device_fd The VFIO file descriptor.
+ * @return The event file descriptor.
+ */
+int vfio_enable_msix(int device_fd, uint32_t interrupt_vector) {
+	info("Enable MSIX Interrupts");
+	char irq_set_buf[MSIX_IRQ_SET_BUF_LEN];
+	struct vfio_irq_set* irq_set;
+	int* fd_ptr;
+
+	// setup event fd
+	int event_fd = eventfd(0, 0);
+
+	irq_set = (struct vfio_irq_set*) irq_set_buf;
+	irq_set->argsz = sizeof(irq_set_buf);;
+	if (!interrupt_vector) {
+		interrupt_vector = 1;
+	} else if (interrupt_vector > MAX_INTERRUPT_VECTORS)
+		interrupt_vector = MAX_INTERRUPT_VECTORS + 1;
+
+	irq_set->count = interrupt_vector;
+	irq_set->flags = VFIO_IRQ_SET_DATA_EVENTFD | VFIO_IRQ_SET_ACTION_TRIGGER;
+	irq_set->index = VFIO_PCI_MSIX_IRQ_INDEX;
+	irq_set->start = 0;
+	fd_ptr = (int*) &irq_set->data;
+	fd_ptr[0] = event_fd;
+
+	check_err(ioctl(device_fd, VFIO_DEVICE_SET_IRQS, irq_set), "enable MSIX interrupt");
+
+	return event_fd;
+}
+
+/**
+ * Disable VFIO MSI-X interrupts.
+ * @param device_fd The VFIO file descriptor.
+ * @return 0 on success.
+ */
+int vfio_disable_msix(int device_fd) {
+	info("Disable MSIX Interrupts");
+	struct vfio_irq_set* irq_set;
+	char irq_set_buf[MSIX_IRQ_SET_BUF_LEN];
+
+	irq_set = (struct vfio_irq_set*) irq_set_buf;
+	irq_set->argsz = sizeof(struct vfio_irq_set);
+	irq_set->count = 0;
+	irq_set->flags = VFIO_IRQ_SET_DATA_NONE | VFIO_IRQ_SET_ACTION_TRIGGER;
+	irq_set->index = VFIO_PCI_MSIX_IRQ_INDEX;
+	irq_set->start = 0;
+
+	check_err(ioctl(device_fd, VFIO_DEVICE_SET_IRQS, irq_set), "disable MSIX interrupt");
+
+	return 0;
+}
+
+/**
+ * Setup VFIO interrupts by detecting which interrupts this device supports.
+ * @param device_fd The VFIO file descriptor.
+ * @return The supported interrupt.
+ */
+int vfio_setup_interrupt(int device_fd) {
+	info("Setup VFIO Interrupts");
+
+	for (int i = VFIO_PCI_MSIX_IRQ_INDEX; i >= 0; i--) {
+		struct vfio_irq_info irq = {.argsz = sizeof(irq), .index = i};
+
+		check_err(ioctl(device_fd, VFIO_DEVICE_GET_IRQ_INFO, &irq), "get IRQ Info");
+
+		/* if this vector cannot be used with eventfd continue with next*/
+		if ((irq.flags & VFIO_IRQ_INFO_EVENTFD) == 0) {
+			error("IRQ doesn't support Event FD");
+			continue;
+		}
+
+		return i;
+	}
+
+	return -1;
+}
+
+/**
+ * Waits for events on the epoll instance referred to by the file descriptor epoll_fd.
+ * The memory area pointed to by events will contain the events that will be available for the caller.
+ * Up to maxevents are returned by epoll_wait.
+ * @param epoll_fd The epoll file descriptor.
+ * @param maxevents The maximum number of events to return. The maxevents argument must be greater than zero.
+ * @param timeout The timeout argument specifies the minimum number of milliseconds that epoll_wait will block.
+ * Specifying a timeout of -1 causes epoll_wait to block indefinitely,
+ * while specifying a timeout equal to zero cause epoll_wait to return immediately, even if no events are available.
+ * @return Number of ready file descriptors.
+ */
+int vfio_epoll_wait(int epoll_fd, int maxevents, int timeout) {
+	struct epoll_event events[maxevents];
+	int rc;
+
+	while (1) {
+		// Waiting for packets
+		rc = (int) check_err(epoll_wait(epoll_fd, events, maxevents, timeout), "to handle epoll wait");
+		if (rc > 0) {
+			/* epoll_wait has at least one fd ready to read */
+			for (int i = 0; i < rc; i++) {
+				uint64_t val;
+				// read event file descriptor to clear interrupt.
+				check_err(read(events[i].data.fd, &val, sizeof(val)), "to read event");
+			}
+			break;
+		} else {
+			/* rc == 0, epoll_wait timed out */
+			break;
+		}
+	}
+
+	return rc;
+}
+
+/**
+ * Add event file descriptor to epoll.
+ * @param event_fd The event file descriptor to add.
+ * @return The epoll file descriptor.
+ */
+int vfio_epoll_ctl(int event_fd) {
+	struct epoll_event event;
+	event.events = EPOLLIN;
+	event.data.fd = event_fd;
+
+	int epoll_fd = (int) check_err(epoll_create1(0), "to created epoll");
+
+	check_err(epoll_ctl(epoll_fd, EPOLL_CTL_ADD, event_fd, &event), "to initialize epoll");
+
+	return epoll_fd;
+}
+
 // returns the devices file descriptor or -1 on error
-int vfio_init(char* pci_addr) {
+int vfio_init(const char* pci_addr) {
 	// find iommu group for the device
 	// `readlink /sys/bus/pci/device/<segn:busn:devn.funcn>/iommu_group`
 	char path[PATH_MAX], iommu_group_path[PATH_MAX];

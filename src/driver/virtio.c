@@ -402,7 +402,7 @@ uint32_t virtio_rx_batch(struct ixy_device* ixy, uint16_t queue_id, struct pkt_b
 		dev->rx_bytes += buf->size;
 		dev->rx_pkts++;
 	}
-	// Fill empty slots in desciptor table
+	// Fill empty slots in descriptor table
 	for (uint16_t idx = 0; idx < vq->vring.num; ++idx) {
 		struct vring_desc* desc = &vq->vring.desc[idx];
 		if (desc->addr != 0) { // descriptor points to something, therefore it is in use

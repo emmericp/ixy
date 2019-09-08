@@ -277,11 +277,17 @@ struct ixgbe_thermal_sensor_data {
 };
 
 /* Interrupt Registers */
+// Extended Interrupt Cause Register
 #define IXGBE_EICR		0x00800
+// Extended Interrupt Cause Set Register
 #define IXGBE_EICS		0x00808
+// Extended Interrupt Mask Set/ Read Register
 #define IXGBE_EIMS		0x00880
+// Extended Interrupt Mask Clear Register
 #define IXGBE_EIMC		0x00888
+//  Extended Interrupt Auto Clear Register
 #define IXGBE_EIAC		0x00810
+// Extended Interrupt Auto Mask Enable Register
 #define IXGBE_EIAM		0x00890
 #define IXGBE_EICS_EX(_i)	(0x00A90 + (_i) * 4)
 #define IXGBE_EIMS_EX(_i)	(0x00AA0 + (_i) * 4)
