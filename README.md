@@ -5,7 +5,7 @@ It takes exclusive control of a network adapter and implements the *whole driver
 Its architecture is similar to [DPDK](http://dpdk.org/) and [Snabb](http://snabb.co) and completely different from (seemingly similar) frameworks such as netmap, pfq, pf_ring, or XDP (all of which rely on kernel components).
 In fact, reading both DPDK and Snabb drivers was crucial to understand some parts of the [Intel 82599 datasheet](https://www.intel.com/content/dam/www/public/us/en/documents/datasheets/82599-10-gbe-controller-datasheet.pdf) better.
 
-Check out the [draft of our paper](https://www.net.in.tum.de/fileadmin/bibtex/publications/papers/ixy_paper_draft2.pdf) or [watch the recording of our talk at 34C3](https://media.ccc.de/v/34c3-9159-demystifying_network_cards) to learn more.
+Check out our research paper ["User Space Network Drivers"](https://www.net.in.tum.de/fileadmin/bibtex/publications/papers/ixy-writing-user-space-network-drivers.pdf) [[BibTeX](https://www.net.in.tum.de/publications/bibtex/ixy-user-space-drivers.bib)] or [watch the recording of our talk at 34C3](https://media.ccc.de/v/34c3-9159-demystifying_network_cards) to learn more.
 
 ixy is designed for educational purposes to learn how a network card works at the driver level.
 Lack of kernel code and external libraries allows you to look through the whole code from startup to the lowest level of the driver.
@@ -16,27 +16,28 @@ Check out the `ixy-fwd` and `ixy-pktgen` example apps and look through the code.
 The code often references sections in the [Intel 82599 datasheet](https://www.intel.com/content/dam/www/public/us/en/documents/datasheets/82599-10-gbe-controller-datasheet.pdf) or the [VirtIO specification](http://docs.oasis-open.org/virtio/virtio/v1.0/virtio-v1.0.pdf), so keep them open while reading the code.
 You will be surprised how simple a full driver for a network card can be.
 
-Don't like C? We also have [implementations in other languages](https://github.com/ixy-languages/ixy-languages) including Rust, Go, Haskell, and OCaml.
+Don't like C? We also have [implementations in other languages](https://github.com/ixy-languages/ixy-languages) (Rust, Go, C#, Java, OCaml, Haskell, Swift, JavaScript, and Python).
 
 
 # Features
 * Driver for Intel NICs in the `ixgbe` family, i.e., the 82599ES family (aka Intel X520)
 * Driver for paravirtualized virtio NICs
-* Less than 1000 lines of C code for a packet forwarder including the whole driver
+* Less than 1000 lines of C code for a packet forwarder including the whole driver (w/o VFIO support)
 * No kernel modules needed (except `vfio-pci` when using the IOMMU / VFIO)
 * Can run without root privileges (when using the IOMMU / VFIO)
 * IOMMU support (see Using the IOMMU / VFIO)
+* Interrupt support (when using VFIO)
 * Simple API with memory management, similar to DPDK, easier to use than APIs based on a ring interface (e.g., netmap)
 * Support for multiple device queues and multiple threads
 * Super fast, can forward > 25 million packets per second on a single 3.0 GHz CPU core
-* Super simple to use: no dependencies, no annoying drivers to load, bind, or manage - see step-by-step tutorial below
+* Super simple to use (when not using VFIO): no dependencies, no annoying drivers to load, bind, or manage - see step-by-step tutorial below
 * BSD license
 
 # Supported hardware
 Tested on an Intel 82599ES (aka Intel X520), X540, and X550. Might not work on all variants of these NICs because our link setup code is a little bit dodgy.
 
 # How does it work?
-Check out the [draft of our paper](https://www.net.in.tum.de/fileadmin/bibtex/publications/papers/ixy_paper_draft2.pdf).
+Check out our research paper ["User Space Network Drivers"](https://www.net.in.tum.de/fileadmin/bibtex/publications/papers/ixy-writing-user-space-network-drivers.pdf) [[BibTeX](https://www.net.in.tum.de/publications/bibtex/ixy-user-space-drivers.bib)] for a detailed evaluation.
 
 If you prefer to dive into the code: Start by reading the apps in [src/app](https://github.com/emmericp/ixy/tree/master/src/app) then follow the function calls into the driver. The comments in the code refer to the [Intel 82599 datasheet](https://www.intel.com/content/dam/www/public/us/en/documents/datasheets/82599-10-gbe-controller-datasheet.pdf) (Revision 3.3, March 2016).
 
@@ -89,6 +90,7 @@ We currently have a simple check if the device is actually a NIC, but trying to 
 
 ## Using the IOMMU / VFIO
 The usage of the IOMMU via the `vfio-pci` driver is implemented for ixgbe devices (Intel X520, X540, and X550).
+Using VFIO will also enable interrupt support.
 To use it, you have to:
 
 0. Enable the IOMMU in the BIOS.
@@ -159,10 +161,11 @@ The good news is that multi-threaded mempools are essentially the same problem a
 It's the lowest common denominator that everyone should be able to understand -- this is for educational purposes only.
 I've taken care to keep the code simple and understandable.
 
-We are working on [implementations in different languages](https://github.com/ixy-languages/ixy-languages) including Rust, Go, Haskell, and OCaml.
+Check out our [implementations in other languages](https://github.com/ixy-languages/ixy-languages) (Rust, Go, C#, Java, OCaml, Haskell, Swift, JavaScript, and Python).
+
 
 ## I can't get line rate :(
-We are currently facing a weird problem that impacts performance if your CPU is too fast. DPDK had the same problem in the past. Try applying bidirectional traffic to the forwarder and/or *underclock* your CPU to speed up ixy.
+There's a weird problem on some systems that causes it to slow down if the CPU is too fast. DPDK had the same problem in the past. Try applying bidirectional traffic to the forwarder and/or *underclock* your CPU to speed up ixy.
 
 ## It's more than ~1000 lines! There is a huge `ixgbe_type.h` file.
 `ixgbe_type.h` is copied from the Intel driver, it's only used as a machine-readable version of the datasheet.
