@@ -1,0 +1,11 @@
+build = [
+    "sudo apt install -y cmake gcc",
+    "mkdir build",
+    "cd build && cmake ..",
+    "cd build && make",
+    "sudo ./setup-hugetlbfs.sh",
+]
+
+pktgen = "build/ixy-pktgen $PCI_ADDR_PKTGEN"
+fwd = "build/ixy-fwd $PCI_ADDR_FWD_SRC $PCI_ADDR_FWD_DST"
+pcap = "build/ixy-pcap $PCI_ADDR_PCAP $PCAP_OUT $PCAP_N"
