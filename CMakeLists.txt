@@ -21,4 +21,5 @@ set(SOURCE_COMMON src/pci.c src/memory.c src/stats.c src/interrupts.c src/driver
 
 add_executable(ixy-pktgen src/app/ixy-pktgen.c ${SOURCE_COMMON})
 add_executable(ixy-fwd src/app/ixy-fwd.c ${SOURCE_COMMON})
+add_executable(ixy-pcap src/app/ixy-pcap.c ${SOURCE_COMMON})
 add_library(ixy-vfio SHARED src/libixy-vfio.c)
