@@ -394,7 +394,7 @@ uint32_t virtio_rx_batch(struct ixy_device* ixy, uint16_t queue_id, struct pkt_b
 
 		// Section 5.1.6.4
 		struct pkt_buf* buf = vq->virtual_addresses[e->id];
-		buf->size = e->len;
+		buf->size = e->len - sizeof(net_hdr);
 		bufs[buf_idx] = buf;
 		//struct virtio_net_hdr* hdr = (void*)(buf->head_room + sizeof(buf->head_room) - sizeof(net_hdr));
 
