@@ -53,7 +53,7 @@ static void virtio_legacy_setup_tx_queue(struct virtio_device* dev, uint16_t idx
 
 	// Create virt queue itself - Section 4.1.5.1.3
 	write_io16(dev->fd, idx, VIRTIO_PCI_QUEUE_SEL);
-	uint32_t max_queue_size = read_io32(dev->fd, VIRTIO_PCI_QUEUE_NUM);
+	uint32_t max_queue_size = read_io16(dev->fd, VIRTIO_PCI_QUEUE_NUM);
 	debug("Max queue size of tx queue #%u: %u", idx, max_queue_size);
 	if (max_queue_size == 0) {
 		return;
@@ -227,7 +227,7 @@ static void virtio_legacy_setup_rx_queue(struct virtio_device* dev, uint16_t idx
 
 	// Create virt queue itself - Section 4.1.5.1.3
 	write_io16(dev->fd, idx, VIRTIO_PCI_QUEUE_SEL);
-	uint32_t max_queue_size = read_io32(dev->fd, VIRTIO_PCI_QUEUE_NUM);
+	uint32_t max_queue_size = read_io16(dev->fd, VIRTIO_PCI_QUEUE_NUM);
 	debug("Max queue size of rx queue #%u: %u", idx, max_queue_size);
 	if (max_queue_size == 0) {
 		return;
