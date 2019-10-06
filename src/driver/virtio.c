@@ -479,7 +479,7 @@ uint32_t virtio_tx_batch(struct ixy_device* ixy, uint16_t queue_id, struct pkt_b
 			buf->buf_addr_phy + offsetof(struct pkt_buf, head_room) + sizeof(buf->head_room) - sizeof(net_hdr);
 		vq->vring.desc[idx].flags = 0;
 		vq->vring.desc[idx].next = 0;
-		vq->vring.avail->ring[idx] = idx;
+		vq->vring.avail->ring[(vq->vring.avail->idx + buf_idx) % vq->vring.num] = idx;
 	}
 	_mm_mfence();
 	vq->vring.avail->idx += buf_idx;
