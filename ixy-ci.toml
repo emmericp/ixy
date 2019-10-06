@@ -1,5 +1,5 @@
 build = [
-    "sudo apt install -y cmake gcc",
+    "sudo apt-get install -y cmake gcc",
     "mkdir build",
     "cd build && cmake ..",
     "cd build && make",
