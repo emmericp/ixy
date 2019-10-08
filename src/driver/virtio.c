@@ -385,11 +385,14 @@ uint32_t virtio_rx_batch(struct ixy_device* ixy, uint16_t queue_id, struct pkt_b
 		struct vring_desc* desc = &vq->vring.desc[e->id];
 		vq->vq_used_last_idx++;
 		// We don't support chaining or indirect descriptors
-		if (desc->flags != VRING_DESC_F_WRITE) {
+		if (desc->flags != (desc->flags & (VRING_DESC_F_WRITE | VRING_DESC_F_NEXT))) {
 			error("unsupported rx flags on descriptor: %x", desc->flags);
 		}
 		// info("Desc %lu %u %u %u", desc->addr, desc->len, desc->flags,
 		// desc->next);
+		if (desc->next) {
+			vq->vring.desc[desc->next] = (struct vring_desc) {};
+		}
 		*desc = (struct vring_desc){};
 
 		// Section 5.1.6.4
@@ -403,9 +406,9 @@ uint32_t virtio_rx_batch(struct ixy_device* ixy, uint16_t queue_id, struct pkt_b
 		dev->rx_pkts++;
 	}
 	// Fill empty slots in descriptor table
-	for (uint16_t idx = 0; idx < vq->vring.num; ++idx) {
+	for (uint16_t idx = 0; idx < vq->vring.num - 1; ++idx) {
 		struct vring_desc* desc = &vq->vring.desc[idx];
-		if (desc->addr != 0) { // descriptor points to something, therefore it is in use
+		if (desc->addr != 0 || vq->vring.desc[idx + 1].addr != 0) { // descriptor points to something, therefore it is in use
 			continue;
 		}
 		// info("Found free desc slot at %u (%u)", idx, vq->vring.num);
@@ -415,11 +418,18 @@ uint32_t virtio_rx_batch(struct ixy_device* ixy, uint16_t queue_id, struct pkt_b
 		}
 		buf->size = vq->mempool->buf_size;
 		memcpy(buf->head_room + sizeof(buf->head_room) - sizeof(net_hdr), &net_hdr, sizeof(net_hdr));
-		vq->vring.desc[idx].len = buf->size + sizeof(net_hdr);
+
+		vq->vring.desc[idx].len = sizeof(net_hdr);
 		vq->vring.desc[idx].addr =
 			buf->buf_addr_phy + offsetof(struct pkt_buf, head_room) + sizeof(buf->head_room) - sizeof(net_hdr);
-		vq->vring.desc[idx].flags = VRING_DESC_F_WRITE;
-		vq->vring.desc[idx].next = 0;
+		vq->vring.desc[idx].flags = VRING_DESC_F_WRITE | VRING_DESC_F_NEXT;
+		vq->vring.desc[idx].next = idx + 1;
+
+		vq->vring.desc[idx + 1].len = buf->size;
+		vq->vring.desc[idx + 1].addr = buf->buf_addr_phy + offsetof(struct pkt_buf, data);
+		vq->vring.desc[idx + 1].flags = VRING_DESC_F_WRITE;
+		vq->vring.desc[idx + 1].next = 0;
+
 		vq->virtual_addresses[idx] = buf;
 		vq->vring.avail->ring[vq->vring.avail->idx % vq->vring.num] = idx;
 		_mm_mfence(); // Make sure exposed descriptors reach device before index is updated
