@@ -476,13 +476,15 @@ uint32_t virtio_tx_batch(struct ixy_device* ixy, uint16_t queue_id, struct pkt_b
 
 		// Fill in descriptors, first is header, second is payload
 		vq->vring.desc[idx].len = sizeof(net_hdr);
-		vq->vring.desc[idx + 1].len = buf->size;
 		vq->vring.desc[idx].addr = buf->buf_addr_phy + offsetof(struct pkt_buf, head_room) + sizeof(buf->head_room) - sizeof(net_hdr);
-		vq->vring.desc[idx + 1].addr = buf->buf_addr_phy + offsetof(struct pkt_buf, data);
 		vq->vring.desc[idx].flags = VRING_DESC_F_NEXT;
-		vq->vring.desc[idx + 1].flags = 0;
 		vq->vring.desc[idx].next = idx + 1;
+
+		vq->vring.desc[idx + 1].len = buf->size;
+		vq->vring.desc[idx + 1].addr = buf->buf_addr_phy + offsetof(struct pkt_buf, data);
+		vq->vring.desc[idx + 1].flags = 0;
 		vq->vring.desc[idx + 1].next = 0;
+
 		vq->vring.avail->ring[(vq->vring.avail->idx + buf_idx) % vq->vring.num] = idx;
 	}
 	_mm_mfence();
