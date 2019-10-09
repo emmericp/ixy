@@ -11,8 +11,6 @@
 #include "virtio.h"
 #include "virtio_type.h"
 
-#include "libixy-vfio.h"
-
 static const char* driver_name = "ixy-virtio";
 
 static inline void virtio_legacy_notify_queue(struct virtio_device* dev, uint16_t idx) {
@@ -284,9 +282,6 @@ static void virtio_legacy_init(struct virtio_device* dev) {
 	// Negotiate features
 	uint32_t host_features = read_io32(dev->fd, VIRTIO_PCI_HOST_FEATURES);
 	debug("Host features: %x", host_features);
-	if (!(host_features & VIRTIO_F_VERSION_1)) {
-		error("In legacy mode but device is not legacy");
-	}
 	const uint32_t required_features = (1u << VIRTIO_NET_F_CSUM) | (1u << VIRTIO_NET_F_GUEST_CSUM) |
 					   (1u << VIRTIO_NET_F_CTRL_VQ) | (1u << VIRTIO_F_ANY_LAYOUT) |
 					   (1u << VIRTIO_NET_F_CTRL_RX) /*| (1u<<VIRTIO_NET_F_MQ)*/;
@@ -340,9 +335,6 @@ struct ixy_device* virtio_init(const char* pci_addr, uint16_t rx_queues, uint16_
 	remove_driver(pci_addr);
 	struct virtio_device* dev = calloc(1, sizeof(*dev));
 	dev->ixy.pci_addr = strdup(pci_addr);
-	if (dev->ixy.vfio) {
-		check_err(vfio_init(dev->ixy.pci_addr), "init vfio");
-	}
 	dev->ixy.driver_name = driver_name;
 	dev->ixy.num_rx_queues = rx_queues;
 	dev->ixy.num_tx_queues = tx_queues;
