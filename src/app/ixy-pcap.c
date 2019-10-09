@@ -37,10 +37,10 @@ int main(int argc, char* argv[]) {
 		error("failed to open file %s", argv[2]);
 	}
 
-	int n_packets = -1;
+	int64_t n_packets = -1;
 	if (argc == 4) {
-		n_packets = atoi(argv[3]);
-		printf("Capturing %d packets...\n", n_packets);
+		n_packets = atol(argv[3]);
+		printf("Capturing %ld packets...\n", n_packets);
 	} else {
 		printf("Capturing packets...\n");
 	}
