@@ -59,10 +59,10 @@ int main(int argc, char* argv[]) {
 	struct pkt_buf* bufs[BATCH_SIZE];
 	while (n_packets != 0) {
 		uint32_t num_rx = ixy_rx_batch(dev, 0, bufs, BATCH_SIZE);
-		for (uint32_t i = 0; i < num_rx && n_packets != 0; i++) {
-			struct timeval tv;
-			gettimeofday(&tv, NULL);
+		struct timeval tv;
+		gettimeofday(&tv, NULL);
 
+		for (uint32_t i = 0; i < num_rx && n_packets != 0; i++) {
 			pcaprec_hdr_t rec_header = {
 				.ts_sec = tv.tv_sec,
 				.ts_usec = tv.tv_usec,
