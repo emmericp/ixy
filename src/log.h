@@ -44,30 +44,4 @@
 	result;\
 })
 
-static void hexdump(void* void_ptr, size_t len) {
-	uint8_t* ptr = (uint8_t*) void_ptr;
-	char ascii[17];
-	for (uint32_t i = 0; i < len; i += 16) {
-		printf("%06x: ", i);
-		int j = 0;
-		for (; j < 16 && i + j < len; j++) {
-			printf("%02x", ptr[i + j]);
-			if (j % 2) {
-				printf(" ");
-			}
-			ascii[j] = isprint(ptr[i + j]) ? ptr[i + j] : '.';
-		}
-		ascii[j] = '\0';
-		if (j < 16) {
-			for (; j < 16; j++) {
-				printf("  ");
-				if (j % 2) {
-					printf(" ");
-				}
-			}
-		}
-		printf("  %s\n", ascii);
-	}
-}
-
 #endif //IXY_LOG_H

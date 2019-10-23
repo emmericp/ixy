@@ -51,10 +51,5 @@ uint32_t pkt_buf_alloc_batch(struct mempool* mempool, struct pkt_buf* bufs[], ui
 struct pkt_buf* pkt_buf_alloc(struct mempool* mempool);
 void pkt_buf_free(struct pkt_buf* buf);
 
-// reads the global VFIO container
-int get_vfio_container();
-
-// globally sets the VFIO container
-void set_vfio_container(int fd);
 
 #endif //IXY_MEMORY_H

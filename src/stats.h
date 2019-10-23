@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <time.h>
-#include "driver/device.h"
+#include "device.h"
 
 struct device_stats {
 	struct ixy_device* device;
