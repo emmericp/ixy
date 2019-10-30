@@ -22,7 +22,7 @@ Don't like C? We also have [implementations in other languages](https://github.c
 # Features
 * Driver for Intel NICs in the `ixgbe` family, i.e., the 82599ES family (aka Intel X520)
 * Driver for paravirtualized virtio NICs
-* Less than 1000 lines of C code for a packet forwarder including the whole driver (w/o VFIO support)
+* Less than 1000 lines of C code for a packet forwarder including the whole driver (w/o virtio and VFIO support, see [minimal branch](https://github.com/emmericp/ixy/tree/minimal-ixgbe-fwd))
 * No kernel modules needed (except `vfio-pci` when using the IOMMU / VFIO)
 * Can run without root privileges (when using the IOMMU / VFIO)
 * IOMMU support (see Using the IOMMU / VFIO)
