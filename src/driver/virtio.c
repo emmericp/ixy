@@ -51,7 +51,7 @@ static void virtio_legacy_setup_tx_queue(struct virtio_device* dev, uint16_t idx
 
 	// Create virt queue itself - Section 4.1.5.1.3
 	write_io16(dev->fd, idx, VIRTIO_PCI_QUEUE_SEL);
-	uint32_t max_queue_size = read_io32(dev->fd, VIRTIO_PCI_QUEUE_NUM);
+	uint32_t max_queue_size = read_io16(dev->fd, VIRTIO_PCI_QUEUE_NUM);
 	debug("Max queue size of tx queue #%u: %u", idx, max_queue_size);
 	if (max_queue_size == 0) {
 		return;
@@ -225,7 +225,7 @@ static void virtio_legacy_setup_rx_queue(struct virtio_device* dev, uint16_t idx
 
 	// Create virt queue itself - Section 4.1.5.1.3
 	write_io16(dev->fd, idx, VIRTIO_PCI_QUEUE_SEL);
-	uint32_t max_queue_size = read_io32(dev->fd, VIRTIO_PCI_QUEUE_NUM);
+	uint32_t max_queue_size = read_io16(dev->fd, VIRTIO_PCI_QUEUE_NUM);
 	debug("Max queue size of rx queue #%u: %u", idx, max_queue_size);
 	if (max_queue_size == 0) {
 		return;
@@ -386,7 +386,7 @@ uint32_t virtio_rx_batch(struct ixy_device* ixy, uint16_t queue_id, struct pkt_b
 
 		// Section 5.1.6.4
 		struct pkt_buf* buf = vq->virtual_addresses[e->id];
-		buf->size = e->len;
+		buf->size = e->len - sizeof(net_hdr);
 		bufs[buf_idx] = buf;
 		//struct virtio_net_hdr* hdr = (void*)(buf->head_room + sizeof(buf->head_room) - sizeof(net_hdr));
 
@@ -471,7 +471,7 @@ uint32_t virtio_tx_batch(struct ixy_device* ixy, uint16_t queue_id, struct pkt_b
 			buf->buf_addr_phy + offsetof(struct pkt_buf, head_room) + sizeof(buf->head_room) - sizeof(net_hdr);
 		vq->vring.desc[idx].flags = 0;
 		vq->vring.desc[idx].next = 0;
-		vq->vring.avail->ring[idx] = idx;
+		vq->vring.avail->ring[(vq->vring.avail->idx + buf_idx) % vq->vring.num] = idx;
 	}
 	_mm_mfence();
 	vq->vring.avail->idx += buf_idx;
