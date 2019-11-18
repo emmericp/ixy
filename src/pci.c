@@ -48,7 +48,9 @@ uint8_t* pci_map_resource(const char* pci_addr) {
 	int fd = check_err(open(path, O_RDWR), "open pci resource");
 	struct stat stat;
 	check_err(fstat(fd, &stat), "stat pci resource");
-	return (uint8_t*) check_err(mmap(NULL, stat.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0), "mmap pci resource");
+	uint8_t* hw = (uint8_t*) check_err(mmap(NULL, stat.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0), "mmap pci resource");
+	check_err(close(fd), "close pci resource");
+	return hw;
 }
 
 int pci_open_resource(const char* pci_addr, const char* resource, int flags) {
