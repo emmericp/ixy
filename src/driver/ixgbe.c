@@ -437,8 +437,7 @@ static void wait_for_link(const struct ixgbe_device* dev) {
 	info("Waiting for link...");
 	int32_t max_wait = 10000000; // 10 seconds in us
 	uint32_t poll_interval = 100000; // 10 ms in us
-	uint32_t speed;
-	while (!(speed = ixgbe_get_link_speed(&dev->ixy)) && max_wait > 0) {
+	while (!(ixgbe_get_link_speed(&dev->ixy)) && max_wait > 0) {
 		usleep(poll_interval);
 		max_wait -= poll_interval;
 	}
