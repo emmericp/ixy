@@ -1,10 +1,7 @@
 #!/bin/bash
 mkdir -p /mnt/huge
 (mount | grep /mnt/huge) > /dev/null || mount -t hugetlbfs hugetlbfs /mnt/huge
-for i in {0..7}
+for i in /sys/devices/system/node/node[0-9]*
 do
-	if [[ -e "/sys/devices/system/node/node$i" ]]
-	then
-		echo 512 > /sys/devices/system/node/node$i/hugepages/hugepages-2048kB/nr_hugepages
-	fi
+	echo 512 > "$i"/hugepages/hugepages-2048kB/nr_hugepages
 done
