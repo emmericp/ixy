@@ -1,7 +1,6 @@
 #include <assert.h>
 #include <errno.h>
 #include <linux/limits.h>
-#include <stdbool.h>
 #include <stdio.h>
 #include <sys/file.h>
 #include <sys/mman.h>

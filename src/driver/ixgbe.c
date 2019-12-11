@@ -11,10 +11,8 @@
 #include "memory.h"
 #include "driver/ixgbe_type.h"
 #include "driver/device.h"
-#include "ixgbe_type.h"
 
 #include "libixy-vfio.h"
-#include "device.h"
 #include "interrupts.h"
 #include "stats.h"
 
