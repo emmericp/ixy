@@ -2090,7 +2090,7 @@ enum {
 #define IXGBE_LED_IVRT_BASE		0x00000040
 #define IXGBE_LED_BLINK_BASE		0x00000080
 #define IXGBE_LED_MODE_MASK_BASE	0x0000000F
-#define IXGBE_LED_OFFSET(_base, _i)	(_base << (8 * (_i)))
+#define IXGBE_LED_OFFSET(_base, _i)	((_base) << (8 * (_i)))
 #define IXGBE_LED_MODE_SHIFT(_i)	(8*(_i))
 #define IXGBE_LED_IVRT(_i)	IXGBE_LED_OFFSET(IXGBE_LED_IVRT_BASE, _i)
 #define IXGBE_LED_BLINK(_i)	IXGBE_LED_OFFSET(IXGBE_LED_BLINK_BASE, _i)
@@ -2822,9 +2822,9 @@ enum {
 #define IXGBE_TX_DESC_SPECIAL_PRI_SHIFT	IXGBE_RX_DESC_SPECIAL_PRI_SHIFT
 
 /* SR-IOV specific macros */
-#define IXGBE_MBVFICR_INDEX(vf_number)	(vf_number >> 4)
+#define IXGBE_MBVFICR_INDEX(vf_number)	((vf_number) >> 4)
 #define IXGBE_MBVFICR(_i)		(0x00710 + ((_i) * 4))
-#define IXGBE_VFLRE(_i)			(((_i & 1) ? 0x001C0 : 0x00600))
+#define IXGBE_VFLRE(_i)			((((_i) & 1) ? 0x001C0 : 0x00600))
 #define IXGBE_VFLREC(_i)		 (0x00700 + ((_i) * 4))
 /* Translated register #defines */
 #define IXGBE_PVFCTRL(P)	(0x00300 + (4 * (P)))
@@ -2845,19 +2845,19 @@ enum {
 #define IXGBE_PVTIVAR_MISC(P)	(0x04E00 + (4 * (P)))
 #define IXGBE_PVTRSCINT(P)	(0x12000 + (4 * (P)))
 #define IXGBE_VFPBACL(P)	(0x110C8 + (4 * (P)))
-#define IXGBE_PVFRDBAL(P)	((P < 64) ? (0x01000 + (0x40 * (P))) \
+#define IXGBE_PVFRDBAL(P)	(((P) < 64) ? (0x01000 + (0x40 * (P))) \
 				 : (0x0D000 + (0x40 * ((P) - 64))))
-#define IXGBE_PVFRDBAH(P)	((P < 64) ? (0x01004 + (0x40 * (P))) \
+#define IXGBE_PVFRDBAH(P)	(((P) < 64) ? (0x01004 + (0x40 * (P))) \
 				 : (0x0D004 + (0x40 * ((P) - 64))))
-#define IXGBE_PVFRDLEN(P)	((P < 64) ? (0x01008 + (0x40 * (P))) \
+#define IXGBE_PVFRDLEN(P)	(((P) < 64) ? (0x01008 + (0x40 * (P))) \
 				 : (0x0D008 + (0x40 * ((P) - 64))))
-#define IXGBE_PVFRDH(P)		((P < 64) ? (0x01010 + (0x40 * (P))) \
+#define IXGBE_PVFRDH(P)		(((P) < 64) ? (0x01010 + (0x40 * (P))) \
 				 : (0x0D010 + (0x40 * ((P) - 64))))
-#define IXGBE_PVFRDT(P)		((P < 64) ? (0x01018 + (0x40 * (P))) \
+#define IXGBE_PVFRDT(P)		(((P) < 64) ? (0x01018 + (0x40 * (P))) \
 				 : (0x0D018 + (0x40 * ((P) - 64))))
-#define IXGBE_PVFRXDCTL(P)	((P < 64) ? (0x01028 + (0x40 * (P))) \
+#define IXGBE_PVFRXDCTL(P)	(((P) < 64) ? (0x01028 + (0x40 * (P))) \
 				 : (0x0D028 + (0x40 * ((P) - 64))))
-#define IXGBE_PVFSRRCTL(P)	((P < 64) ? (0x01014 + (0x40 * (P))) \
+#define IXGBE_PVFSRRCTL(P)	(((P) < 64) ? (0x01014 + (0x40 * (P))) \
 				 : (0x0D014 + (0x40 * ((P) - 64))))
 #define IXGBE_PVFPSRTYPE(P)	(0x0EA00 + (4 * (P)))
 #define IXGBE_PVFTDBAL(P)	(0x06000 + (0x40 * (P)))
@@ -3414,8 +3414,8 @@ typedef u64 ixgbe_physical_layer;
  */
 
 /* BitTimes (BT) conversion */
-#define IXGBE_BT2KB(BT)		((BT + (8 * 1024 - 1)) / (8 * 1024))
-#define IXGBE_B2BT(BT)		(BT * 8)
+#define IXGBE_BT2KB(BT)		(((BT) + (8 * 1024 - 1)) / (8 * 1024))
+#define IXGBE_B2BT(BT)		((BT) * 8)
 
 /* Calculate Delay to respond to PFC */
 #define IXGBE_PFC_D	672
