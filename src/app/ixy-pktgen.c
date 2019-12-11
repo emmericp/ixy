@@ -109,6 +109,5 @@ int main(int argc, char* argv[]) {
 		}
 		// track stats
 	}
-	return 0;
 }
 

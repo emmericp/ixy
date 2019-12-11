@@ -102,7 +102,7 @@ int vfio_enable_msix(int device_fd, uint32_t interrupt_vector) {
 	int event_fd = eventfd(0, 0);
 
 	irq_set = (struct vfio_irq_set*) irq_set_buf;
-	irq_set->argsz = sizeof(irq_set_buf);;
+	irq_set->argsz = sizeof(irq_set_buf);
 	if (!interrupt_vector) {
 		interrupt_vector = 1;
 	} else if (interrupt_vector > MAX_INTERRUPT_VECTORS)
