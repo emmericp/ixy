@@ -157,7 +157,7 @@ int vfio_setup_interrupt(int device_fd) {
 
 		/* if this vector cannot be used with eventfd continue with next*/
 		if ((irq.flags & VFIO_IRQ_INFO_EVENTFD) == 0) {
-			error("IRQ doesn't support Event FD");
+			debug("IRQ doesn't support Event FD");
 			continue;
 		}
 
