@@ -664,6 +664,7 @@ uint32_t ixgbe_rx_batch(struct ixy_device* ixy, uint16_t queue_id, struct pkt_bu
 			desc_ptr->read.pkt_addr = new_buf->buf_addr_phy + offsetof(struct pkt_buf, data);
 			desc_ptr->read.hdr_addr = 0; // this resets the flags
 			queue->virtual_addresses[rx_index] = new_buf;
+			__builtin_prefetch(buf);
 			bufs[buf_index] = buf;
 			// want to read the next one in the next iteration, but we still need the last/current to update RDT later
 			last_rx_index = rx_index;
