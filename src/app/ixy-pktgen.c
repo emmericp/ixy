@@ -70,8 +70,8 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}
 
-	struct mempool* mempool = init_mempool();
 	struct ixy_device* dev = ixy_init(argv[1], 1, 1, 0);
+	struct mempool* mempool = init_mempool();
 
 	uint64_t last_stats_printed = monotonic_time();
 	uint64_t counter = 0;
