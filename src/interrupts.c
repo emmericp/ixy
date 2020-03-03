@@ -6,11 +6,11 @@
 #include <stdio.h>
 
 /**
- * Calculate packets per microsecond based on the received number of packets and the elapsed time in nanoseconds since the
+ * Calculate packets per millisecond based on the received number of packets and the elapsed time in nanoseconds since the
  * last calculation.
  * @param received_pkts Number of received packets.
  * @param elapsed_time_nanos Time elapsed in nanoseconds since the last calculation.
- * @return Packets per microsecond.
+ * @return Packets per millisecond.
  */
 static uint64_t ppms(uint64_t received_pkts, uint64_t elapsed_time_nanos) {
 	return received_pkts / (elapsed_time_nanos / 1000000);
