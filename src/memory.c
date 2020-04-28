@@ -45,6 +45,9 @@ struct dma_memory memory_allocate_dma(size_t size, bool require_contiguous) {
 	if (VFIO_CONTAINER_FILE_DESCRIPTOR != -1) {
 		// VFIO == -1 means that there is no VFIO container set, i.e. VFIO / IOMMU is not activated
 		debug("allocating dma memory via VFIO");
+		if (size < MIN_DMA_MEMORY) {
+			size = MIN_DMA_MEMORY;
+		}
 		void* virt_addr = (void*) check_err(mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS | MAP_HUGETLB | MAP_HUGE_2MB, -1, 0), "mmap hugepage");
 		// create IOMMU mapping
 		uint64_t iova = (uint64_t) vfio_map_dma(virt_addr, size);
