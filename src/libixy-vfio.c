@@ -226,8 +226,7 @@ int vfio_init(const char* pci_addr) {
 	char path[PATH_MAX], iommu_group_path[PATH_MAX];
 	struct stat st;
 	snprintf(path, sizeof(path), "/sys/bus/pci/devices/%s/", pci_addr);
-	int ret = stat(path, &st);
-	if (ret < 0) {
+	if (stat(path, &st) < 0) {
 		// No such device
 		return -1;
 	}
@@ -271,7 +270,7 @@ int vfio_init(const char* pci_addr) {
 		// Set vfio type (type1 is for IOMMU like VT-d or AMD-Vi) for the
 		// container.
 		// This can only be done after at least one group is in the container.
-		ret = check_err(ioctl(cfd, VFIO_SET_IOMMU, VFIO_TYPE1_IOMMU), "set IOMMU type");
+		check_err(ioctl(cfd, VFIO_SET_IOMMU, VFIO_TYPE1_IOMMU), "set IOMMU type");
 	}
 
 	// get device file descriptor
