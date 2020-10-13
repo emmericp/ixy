@@ -456,7 +456,10 @@ static void reset_and_init(struct ixgbe_device* dev) {
 	// section 4.6.3.1 - disable interrupts again after reset
 	disable_interrupts(dev);
 
+	struct mac_address mac = ixgbe_get_mac_addr(&dev->ixy);
+
 	info("Initializing device %s", dev->ixy.pci_addr);
+	info("MAC address %02x:%02x:%02x:%02x:%02x:%02x", mac.addr[0], mac.addr[1], mac.addr[2], mac.addr[3], mac.addr[4], mac.addr[5]);
 
 	// section 4.6.3 - Wait for EEPROM auto read completion
 	wait_set_reg32(dev->addr, IXGBE_EEC, IXGBE_EEC_ARD);
@@ -543,6 +546,8 @@ struct ixy_device* ixgbe_init(const char* pci_addr, uint16_t rx_queues, uint16_t
 	dev->ixy.read_stats = ixgbe_read_stats;
 	dev->ixy.set_promisc = ixgbe_set_promisc;
 	dev->ixy.get_link_speed = ixgbe_get_link_speed;
+	dev->ixy.get_mac_addr = ixgbe_get_mac_addr;
+	dev->ixy.set_mac_addr = ixgbe_set_mac_addr;
 	dev->ixy.interrupts.interrupts_enabled = interrupt_timeout != 0;
 	// 0x028 (10ys) => 97600 INT/s
 	dev->ixy.interrupts.itr_rate = 0x028;
@@ -585,6 +590,33 @@ uint32_t ixgbe_get_link_speed(const struct ixy_device* ixy) {
 		default:
 			return 0;
 	}
+}
+
+struct mac_address ixgbe_get_mac_addr(const struct ixy_device* ixy) {
+	struct mac_address mac;
+	struct ixgbe_device* dev = IXY_TO_IXGBE(ixy);
+
+	uint32_t rar_low = get_reg32(dev->addr, IXGBE_RAL(0));
+	uint32_t rar_high = get_reg32(dev->addr, IXGBE_RAH(0));
+
+	mac.addr[0] = rar_low;
+	mac.addr[1] = rar_low >> 8;
+	mac.addr[2] = rar_low >> 16;
+	mac.addr[3] = rar_low >> 24;
+	mac.addr[4] = rar_high;
+	mac.addr[5] = rar_high >> 8;
+
+	return mac;
+}
+
+void ixgbe_set_mac_addr(struct ixy_device* ixy, struct mac_address mac) {
+	struct ixgbe_device* dev = IXY_TO_IXGBE(ixy);
+
+	uint32_t rar_low = mac.addr[0] + (mac.addr[1] << 8) + (mac.addr[2] << 16) + (mac.addr[3] << 24);
+	uint32_t rar_high = mac.addr[4] + (mac.addr[5] << 8);
+
+	set_reg32(dev->addr, IXGBE_RAL(0), rar_low);
+	set_reg32(dev->addr, IXGBE_RAH(0), rar_high);
 }
 
 void ixgbe_set_promisc(struct ixy_device* ixy, bool enabled) {

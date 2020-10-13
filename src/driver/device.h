@@ -13,6 +13,10 @@
 // Forward declare struct to prevent cyclic include with stats.h
 struct device_stats;
 
+struct __attribute__((__packed__)) mac_address {
+	uint8_t	addr[6];
+};
+
 /**
  * container_of - cast a member of a structure out to the containing structure
  * Adapted from the Linux kernel.
@@ -41,6 +45,8 @@ struct ixy_device {
 	void (*read_stats) (struct ixy_device* dev, struct device_stats* stats);
 	void (*set_promisc) (struct ixy_device* dev, bool enabled);
 	uint32_t (*get_link_speed) (const struct ixy_device* dev);
+	struct mac_address (*get_mac_addr) (const struct ixy_device* dev);
+	void (*set_mac_addr) (struct ixy_device* dev, struct mac_address mac);
 	bool vfio;
 	int vfio_fd; // device fd
 	struct interrupts interrupts;
@@ -67,6 +73,14 @@ static inline void ixy_set_promisc(struct ixy_device* dev, bool enabled) {
 
 static inline uint32_t get_link_speed(const struct ixy_device* dev) {
 	return dev->get_link_speed(dev);
+}
+
+static inline struct mac_address get_mac_addr(const struct ixy_device* dev) {
+	return dev->get_mac_addr(dev);
+}
+
+static inline void set_mac_addr(struct ixy_device* dev, struct mac_address mac) {
+	dev->set_mac_addr(dev, mac);
 }
 
 // calls ixy_tx_batch until all packets are queued with busy waiting
