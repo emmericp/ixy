@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#define MIN_DMA_MEMORY 4096 // we can not allocate less than page_size memory
+
 // enables DMA on a VFIO device
 void vfio_enable_dma(int device_fd);
 

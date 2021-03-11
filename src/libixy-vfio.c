@@ -18,11 +18,11 @@
 
 #include <driver/device.h>
 
+#include "libixy-vfio.h"
+
 #define IRQ_SET_BUF_LEN (sizeof(struct vfio_irq_set) + sizeof(int))
 #define MAX_INTERRUPT_VECTORS 32
 #define MSIX_IRQ_SET_BUF_LEN (sizeof(struct vfio_irq_set) + sizeof(int) * (MAX_INTERRUPT_VECTORS + 1))
-
-ssize_t MIN_DMA_MEMORY = 4096; // we can not allocate less than page_size memory
 
 void vfio_enable_dma(int device_fd) {
 	// write to the command register (offset 4) in the PCIe config space
