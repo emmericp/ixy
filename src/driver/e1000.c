@@ -358,9 +358,8 @@ uint32_t e1000_tx_batch(struct ixy_device* ixy, uint16_t queue_id, struct pkt_bu
 static void reset_and_init(struct e1000_device* dev) {
 	info("Resetting device %s", dev->ixy.pci_addr);
 
-    uint32_t control = get_reg32(dev->addr, E1000_CTL);
-
 	// disable interrupts
+	uint32_t control = get_reg32(dev->addr, E1000_CTL);
 	set_reg32(dev->addr, E1000_IMS, 0);
 	set_reg32(dev->addr, E1000_CTL, control | E1000_CTL_RST);
 	wait_clear_reg32(dev->addr, E1000_CTL, E1000_CTL_RST);
