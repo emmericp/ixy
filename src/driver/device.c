@@ -22,7 +22,7 @@ struct ixy_device* ixy_init(const char* pci_addr, uint16_t rx_queues, uint16_t t
 	}
 	if (vendor_id == 0x1af4 && device_id >= 0x1000) {
 		return virtio_init(pci_addr, rx_queues, tx_queues);
-  } else if (vendor_id == 0x8086 && device_id >= 0x1000) {
+	} else if (is_e1000_compatible(vendor_id, device_id)) {
 		return e1000_init(pci_addr, rx_queues, tx_queues, interrupt_timeout);
 	} else {
 		// Our best guess is to try ixgbe

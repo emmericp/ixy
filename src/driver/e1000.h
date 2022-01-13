@@ -22,5 +22,6 @@ void e1000_set_promisc(struct ixy_device* dev, bool enabled);
 void e1000_read_stats(struct ixy_device* dev, struct device_stats* stats);
 uint32_t e1000_tx_batch(struct ixy_device* dev, uint16_t queue_id, struct pkt_buf* bufs[], uint32_t num_bufs);
 uint32_t e1000_rx_batch(struct ixy_device* dev, uint16_t queue_id, struct pkt_buf* bufs[], uint32_t num_bufs);
+bool is_e1000_compatible(uint16_t vendor_id, uint16_t device_id);
 
 #endif //IXY_E1000_H

@@ -145,4 +145,7 @@ struct e1000_rx_desc
   uint16_t special;
 };
 
-
+/* Supported Device IDs */
+#define E1000_VENDOR_ID 0x8086
+#define E1000_82540EMA_DEVICE_ID 0x100E
+#define E1000_82540EPA_DEVICE_ID 0x1017

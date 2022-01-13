@@ -440,3 +440,15 @@ struct ixy_device* e1000_init(const char* pci_addr, uint16_t rx_queues, uint16_t
 	return &dev->ixy;
 }
 
+bool is_e1000_compatible(uint16_t vendor_id, uint16_t device_id) {
+	if (vendor_id != E1000_VENDOR_ID) {
+		return false;
+	}
+
+	if (device_id == E1000_82540EMA_DEVICE_ID
+		|| device_id == E1000_82540EPA_DEVICE_ID) {
+		return true;
+	}
+
+	return false;
+}
