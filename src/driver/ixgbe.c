@@ -39,7 +39,7 @@ struct ixgbe_rx_queue {
 	// position we are reading from
 	uint16_t rx_index;
 	// virtual addresses to map descriptors back to their mbuf for freeing
-	void* virtual_addresses[];
+	void** virtual_addresses;
 };
 
 // allocated for each tx queue, keeps state for the transmit function
@@ -51,7 +51,7 @@ struct ixgbe_tx_queue {
 	// position to insert packets for transmission
 	uint16_t tx_index;
 	// virtual addresses to map descriptors back to their mbuf for freeing
-	void* virtual_addresses[];
+	void** virtual_addresses;
 };
 
 /**
@@ -568,8 +568,14 @@ struct ixy_device* ixgbe_init(const char* pci_addr, uint16_t rx_queues, uint16_t
 		debug("mapping BAR0 region via pci file...");
 		dev->addr = pci_map_resource(pci_addr);
 	}
-	dev->rx_queues = calloc(rx_queues, sizeof(struct ixgbe_rx_queue) + sizeof(void*) * MAX_RX_QUEUE_ENTRIES);
-	dev->tx_queues = calloc(tx_queues, sizeof(struct ixgbe_tx_queue) + sizeof(void*) * MAX_TX_QUEUE_ENTRIES);
+	dev->rx_queues = calloc(rx_queues, sizeof(struct ixgbe_rx_queue));
+	dev->tx_queues = calloc(tx_queues, sizeof(struct ixgbe_tx_queue));
+	for (uint16_t i = 0; i < rx_queues; ++i) {
+		((struct ixgbe_rx_queue*)dev->rx_queues)[i].virtual_addresses = calloc(MAX_RX_QUEUE_ENTRIES, sizeof(void*));
+	}
+	for (uint16_t i = 0; i < tx_queues; ++i) {
+		((struct ixgbe_tx_queue*)dev->tx_queues)[i].virtual_addresses = calloc(MAX_TX_QUEUE_ENTRIES, sizeof(void*));
+	}
 	reset_and_init(dev);
 	return &dev->ixy;
 }
